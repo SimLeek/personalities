@@ -136,14 +136,15 @@ class ProximalActorCritic(object):
 
     >>> acwm = ProximalActorCritic(5, 2, 256)
     >>> acwm.memory.reset()
-    >>> for action in range(len(512)):
-    ...   # ... compute state here ...
-    ...   action = acwm.get_action(state)
-    ...   mouse.x = action[0]
-    ...   mouse.y = action[1]
-    ...   # ... compute reward here ...
-    ...   acwm.memory.update(reward=[1,0], done=[0])
-    >>> acwm.update_ppo()
+    >>> while True:
+    >>>   for action in range(len(512)):
+    ...     # ... compute state here ...
+    ...     action = acwm.get_action(state)
+    ...     mouse.x = action[0]
+    ...     mouse.y = action[1]
+    ...     # ... compute reward here ...
+    ...     acwm.memory.update(reward=[1,0], done=[0])
+    >>>   acwm.update_ppo()
     """
     _LEARNING_RATE = 1e-4
 
