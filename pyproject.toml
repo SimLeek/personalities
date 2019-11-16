@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "personalities"
+version = "0.1.0"
+description = "A library of AI learners."
+authors = ["SimLeek <simulator.leek@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.6"
+
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+tox = "^3.14"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
