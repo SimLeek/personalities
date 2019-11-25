@@ -22,3 +22,17 @@ def test_cv_image_to_pytorch():
 
     assert pytorch_bw.shape == torch.Size([1, 1, 8, 8])
     assert pytorch_bw.is_cuda
+
+
+def test_vector_to_2d_encoding():
+    vec = np.zeros((20,))
+
+    pytorch_vec = vector_to_2d_encoding(vec)
+
+    assert pytorch_vec.shape == torch.Size([1, 20, 1, 1])
+    assert pytorch_vec.is_cuda
+
+    pytorch_vec = vector_to_2d_encoding(vec, cuda=False)
+
+    assert pytorch_vec.shape == torch.Size([1, 20, 1, 1])
+    assert not pytorch_vec.is_cuda

@@ -7,7 +7,7 @@ import torch.optim as optim
 import torch
 from torch.optim.optimizer import Optimizer
 
-from personalities.util.cv_helpers import cv_image_to_pytorch, vector_to_pytorch
+from personalities.util.cv_helpers import cv_image_to_pytorch, vector_to_2d_encoding
 from personalities.util.simple_auto_encoder_256 import AutoEncoder
 
 import torch.nn as nn
@@ -56,7 +56,15 @@ class CropSettings(object):
     POST_LENS = (256, 256, 3)
 
 
-class CamEye(object):
+class VirtualEye(object):
+    """
+    Allows an AI to move around the input video space, cutting out and focusing on regions.
+
+    Note that it does not take into account muscle fatigue or focus speed. Because this is virtual, muscle fatigue is
+     nonexistent and focus speed is instantaneous. Since that's the case, looking everywhere around the image is
+     actually the best strategy.
+    """
+
     __slots__ = [
         "cam",
         "_pre_crop_callback",
@@ -77,6 +85,13 @@ class CamEye(object):
         "crop_settings",
         "bad_actions",
     ]
+
+    ZOOM_MIN = 0.5
+    ZOOM_MAX = 2.0
+    BARREL_MIN = 0.5
+    BARREL_MAX = 2.0
+    CENTER_MIN = 0.001
+    CENTER_MAX = 1
 
     def __init__(
             self,
@@ -101,21 +116,19 @@ class CamEye(object):
         self.center_x_y = None
         self.zoom = None
         self.barrel = None
+        self.unclipped_center_x_y = None
+        self.unclipped_zoom = None
+        self.unclipped_barrel = None
         self._move_data_len = 0
 
         if torch.cuda.is_available():
             self.recognition_system.model.cuda()
 
-    ZOOM_MIN = 0.5
-    ZOOM_MAX = 2.0
-    BARREL_MIN = 0.5
-    BARREL_MAX = 2.0
-
     def set_focal_point(self, center_x_y: np.ndarray, zoom, barrel):
         self.unclipped_center_x_y = center_x_y.copy()
         self.unclipped_zoom = zoom
         self.unclipped_barrel = barrel
-        self.center_x_y = center_x_y.clip(0.001, 1)
+        self.center_x_y = center_x_y.clip(self.CENTER_MIN, self.CENTER_MAX)
         self.zoom = min(max(zoom, self.ZOOM_MIN), self.ZOOM_MAX)
         self.barrel = min(max(barrel, self.BARREL_MIN), self.BARREL_MAX)
 
@@ -138,7 +151,7 @@ class CamEye(object):
                 self.recognition_system.optimizer.zero_grad()
                 t_frame = cv_image_to_pytorch(frame)
                 p_frame = cv_image_to_pytorch(self._prev_frame)
-                m_frame = vector_to_pytorch(self._prev_movement)
+                m_frame = vector_to_2d_encoding(self._prev_movement)
                 guess_current_frame = self.recognition_system.model(p_frame, m_frame)
                 loss = self.recognition_system.loss_criteria(
                     guess_current_frame, t_frame
@@ -149,6 +162,7 @@ class CamEye(object):
                         loss.backward()
                         lossed = True
                     except RuntimeError as re:
+                        breakpoint()
                         print("close some GPU using stuff.")
                 self.recognition_system.optimizer.step()
 
@@ -335,7 +349,7 @@ class CamEye(object):
 if __name__ == "__main__":
     from personalities.base.actor_critic import ProximalActorCritic
 
-    eye = CamEye()
+    eye = VirtualEye()
     pac = None
     i = 1
     for encoding, loss in eye:

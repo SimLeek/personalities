@@ -15,7 +15,7 @@ def cv_image_to_pytorch(image: np.ndarray, cuda: bool = True) -> torch.Tensor:
 
 
 # todo: move this to displayarray or relayarray
-def vector_to_pytorch(vector: np.ndarray, cuda: bool = True) -> torch.Tensor:
+def vector_to_2d_encoding(vector: np.ndarray, cuda: bool = True) -> torch.Tensor:
     torch_vec = torch.from_numpy(vector).float()
     if cuda:
         torch_vec = torch_vec.cuda()

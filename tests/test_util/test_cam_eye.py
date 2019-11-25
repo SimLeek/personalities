@@ -2,11 +2,10 @@ from personalities.util.cam_eye import *
 import mock
 
 
-
 def test_cam_eye_init():
     with mock.patch("personalities.util.cam_eye.display") as mock_cam, \
-            mock.patch.object(CamEye, "_init_cam") as mock_mouse_loop:
-        ceye = CamEye()
+            mock.patch.object(VirtualEye, "_init_cam") as mock_mouse_loop:
+        ceye = VirtualEye()
 
         assert ceye.yields.LOSS
         assert ceye.yields.ENCODING
@@ -41,3 +40,42 @@ def test_recognition_system_object():
     assert r.model.is_same_at_start(AutoEncoder(1024))
     assert isinstance(r.loss_criteria, nn.SmoothL1Loss)
     assert isinstance(r.optimizer, optim.Adam)
+
+
+def test_set_focal_point():
+    with mock.patch.object(VirtualEye, "_init_cam"):
+        ceye = VirtualEye()
+
+        assert ceye.CENTER_MIN == 0.001
+        assert ceye.CENTER_MAX == 1
+        assert ceye.ZOOM_MIN == 0.5
+        assert ceye.ZOOM_MAX == 2.0
+        assert ceye.BARREL_MIN == 0.5
+        assert ceye.BARREL_MAX == 2.0
+
+        ceye.set_focal_point(np.asarray([-1, -1]), 0, 0)
+
+        assert all(ceye.unclipped_center_x_y == np.asarray([-1, -1]))
+        assert all(ceye.center_x_y == np.asarray([ceye.CENTER_MIN, ceye.CENTER_MIN]))
+        assert ceye.unclipped_zoom == 0
+        assert ceye.zoom == ceye.ZOOM_MIN
+        assert ceye.unclipped_barrel == 0
+        assert ceye.barrel == ceye.BARREL_MIN
+
+        ceye.set_focal_point(np.asarray([2, 3]), 4, 5)
+
+        assert all(ceye.unclipped_center_x_y == np.asarray([2, 3]))
+        assert all(ceye.center_x_y == np.asarray([ceye.CENTER_MAX, ceye.CENTER_MAX]))
+        assert ceye.unclipped_zoom == 4
+        assert ceye.zoom == ceye.ZOOM_MAX
+        assert ceye.unclipped_barrel == 5
+        assert ceye.barrel == ceye.BARREL_MAX
+
+        ceye.set_focal_point(np.asarray([.3, .4]), .6, .7)
+
+        assert all(ceye.unclipped_center_x_y == np.asarray([.3, .4]))
+        assert all(ceye.center_x_y == np.asarray([.3, .4]))
+        assert ceye.unclipped_zoom == .6
+        assert ceye.zoom == .6
+        assert ceye.unclipped_barrel == .7
+        assert ceye.barrel == .7
