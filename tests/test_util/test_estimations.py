@@ -1,4 +1,8 @@
-from personalities.util.estimations import ensure_2d, conv2d_output_shape, conv_transpose_2d_output_shape
+from personalities.util.estimations import (
+    ensure_2d,
+    conv2d_output_shape,
+    conv_transpose_2d_output_shape,
+)
 
 
 def test_ensure_2d():
