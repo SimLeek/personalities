@@ -3,9 +3,10 @@ import mock
 
 
 def test_cam_eye_init():
-    with mock.patch("personalities.util.cam_eye.display") as mock_cam, \
-            mock.patch.object(VirtualEye, "_init_cam") as mock_mouse_loop:
-        ceye = VirtualEye()
+    with mock.patch(
+        "personalities.util.cam_eye.display"
+    ) as mock_cam, mock.patch.object(VirtualEyeWithLens, "_init_cam") as mock_mouse_loop:
+        ceye = VirtualEyeWithLens()
 
         assert ceye.yields.LOSS
         assert ceye.yields.ENCODING
@@ -43,8 +44,8 @@ def test_recognition_system_object():
 
 
 def test_set_focal_point():
-    with mock.patch.object(VirtualEye, "_init_cam"):
-        ceye = VirtualEye()
+    with mock.patch.object(VirtualEyeWithLens, "_init_cam"):
+        ceye = VirtualEyeWithLens()
 
         assert ceye.CENTER_MIN == 0.001
         assert ceye.CENTER_MAX == 1
@@ -71,11 +72,11 @@ def test_set_focal_point():
         assert ceye.unclipped_barrel == 5
         assert ceye.barrel == ceye.BARREL_MAX
 
-        ceye.set_focal_point(np.asarray([.3, .4]), .6, .7)
+        ceye.set_focal_point(np.asarray([0.3, 0.4]), 0.6, 0.7)
 
-        assert all(ceye.unclipped_center_x_y == np.asarray([.3, .4]))
-        assert all(ceye.center_x_y == np.asarray([.3, .4]))
-        assert ceye.unclipped_zoom == .6
-        assert ceye.zoom == .6
-        assert ceye.unclipped_barrel == .7
-        assert ceye.barrel == .7
+        assert all(ceye.unclipped_center_x_y == np.asarray([0.3, 0.4]))
+        assert all(ceye.center_x_y == np.asarray([0.3, 0.4]))
+        assert ceye.unclipped_zoom == 0.6
+        assert ceye.zoom == 0.6
+        assert ceye.unclipped_barrel == 0.7
+        assert ceye.barrel == 0.7
