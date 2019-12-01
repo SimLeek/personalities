@@ -22,19 +22,6 @@ class ActorCritic(nn.Module):
             nn.Linear(max_complexity, 1),
         )
 
-        self.critic._modules["0"].bias = torch.nn.Parameter(
-            self.critic._modules["0"].bias / 2000
-        )
-        self.critic._modules["0"].weight = torch.nn.Parameter(
-            self.critic._modules["0"].weight / 2000
-        )
-        self.critic._modules["2"].bias = torch.nn.Parameter(
-            self.critic._modules["2"].bias / 2000
-        )
-        self.critic._modules["2"].weight = torch.nn.Parameter(
-            self.critic._modules["2"].weight / 2000
-        )
-
         self.num_outputs = num_outputs
         self.out_feedback = torch.zeros((1, num_outputs))
 
@@ -42,19 +29,6 @@ class ActorCritic(nn.Module):
             nn.Linear(num_inputs + num_outputs, max_complexity),
             nn.ReLU(),
             nn.Linear(max_complexity, num_outputs),
-        )
-
-        self.actor._modules["0"].bias = torch.nn.Parameter(
-            self.actor._modules["0"].bias / 2000
-        )
-        self.actor._modules["0"].weight = torch.nn.Parameter(
-            self.actor._modules["0"].weight / 2000
-        )
-        self.actor._modules["2"].bias = torch.nn.Parameter(
-            self.actor._modules["2"].bias / 2000
-        )
-        self.actor._modules["2"].weight = torch.nn.Parameter(
-            self.actor._modules["2"].weight / 2000
         )
 
         self.log_std = nn.Parameter(torch.ones(1, num_outputs) * std)
@@ -111,7 +85,7 @@ def standardize(x: torch.Tensor, machine_epsilon=1e-8):
 
 
 class _ArrayActorCriticMemory(object):
-    def __init__(self, device):
+    def __init__(self, device, max_size=float('inf')):
         self.device = device
 
         self.last_action = None
@@ -119,70 +93,90 @@ class _ArrayActorCriticMemory(object):
         self.last_value = None
         self.last_state = None
 
-        self.log_probs = []
-        self.values = []
-        self.rewards = []
-        self.done_masks = []
-        self.states = []
-        self.actions = []
-        self.gaes: List[torch.Tensor] = []
-        self.advantages: List[torch.Tensor] = []
+        self.log_probs = torch.empty((0,))
+        self.values = torch.empty((0,))
+        self.rewards = torch.empty((0,))
+        self.done_masks = torch.empty((0,))
+        self.states = torch.empty((0,))
+        self.actions = torch.empty((0,))
+        self.gaes: torch.Tensor = torch.empty((0,))
+        self.advantages: torch.Tensor = torch.empty((0,))
+
+        self.max_size = max_size
+
+    def __len__(self):
+        return self.values.numel()
+
+    def cuda(self):
+        self.log_probs.cuda()
+        self.values.cuda()
+        self.rewards.cuda()
+        self.done_masks.cuda()
+        self.states.cuda()
+        self.actions.cuda()
+        self.gaes.cuda()
+        self.advantages.cuda()
+        self.device = self.values.device
+
+    def cpu(self):
+        self.log_probs.cpu()
+        self.values.cpu()
+        self.rewards.cpu()
+        self.done_masks.cpu()
+        self.states.cpu()
+        self.actions.cpu()
+        self.gaes.cpu()
+        self.advantages.cpu()
+        self.device = self.values.device
 
     def reset(self):
-        self.log_probs = []
-        self.values = []
-        self.rewards = []
-        self.done_masks = []
-        self.states = []
-        self.actions = []
+        self.log_probs = torch.empty((0,)).to(self.device)
+        self.values = torch.empty((0,)).to(self.device)
+        self.rewards = torch.empty((0,)).to(self.device)
+        self.done_masks = torch.empty((0,)).to(self.device)
+        self.states = torch.empty((0,)).to(self.device)
+        self.actions = torch.empty((0,)).to(self.device)
         return self
 
     def update(self, reward, done):
-        log_prob = self.last_dist.log_prob(self.last_action)
-        self.log_probs.append(log_prob)
-        self.values.append(self.last_value)
-        self.rewards.append(
-            reward.clone()
-            .detach()
-            .to(torch.float32)
-            .unsqueeze(0)
-            .unsqueeze(1)
-            .to(self.device)
-        )
-        self.done_masks.append(
-            (1 - torch.tensor(done)).to(torch.float32).unsqueeze(1).to(self.device)
-        )
-        self.states.append(self.last_state)
-        self.actions.append(self.last_action)
+        log_prob = self.last_dist.log_prob(self.last_action).to(self.device)
+        if len(self) < self.max_size:
+            self.log_probs = torch.cat([self.log_probs, log_prob])
+            self.values = torch.cat([self.values, self.last_value.to(self.device)])
+            self.rewards = torch.cat([self.rewards,
+                                      reward.clone()
+                                     .detach()
+                                     .to(torch.float32)
+                                     .unsqueeze(0)
+                                     .unsqueeze(1)
+                                     .to(self.device)])
+            self.done_masks = torch.cat([self.done_masks,
+                                         (1 - torch.tensor(done)).to(torch.float32).unsqueeze(1).to(self.device)])
+            self.states = torch.cat([self.states, self.last_state.to(self.device)])
+            self.actions = torch.cat([self.actions, self.last_action.to(self.device)])
+        else:
+            self.log_probs = torch.cat([self.log_probs[1:], log_prob])
+            self.values = torch.cat([self.values[1:], self.last_value.to(self.device)])
+            self.rewards = torch.cat([self.rewards[1:],
+                                      reward.clone()
+                                     .detach()
+                                     .to(torch.float32)
+                                     .unsqueeze(0)
+                                     .unsqueeze(1)
+                                     .to(self.device)])
+            self.done_masks = torch.cat([self.done_masks[1:],
+                                         (1 - torch.tensor(done)).to(torch.float32).unsqueeze(1).to(self.device)])
+            self.states = torch.cat([self.states[1:], self.last_state.to(self.device)])
+            self.actions = torch.cat([self.actions[1:], self.last_action.to(self.device)])
         return self
 
-    def compute_torch(self):
-        if isinstance(self.gaes, list):
-            self.gaes = torch.cat(self.gaes).detach().to(torch.float32).to(self.device)
-        if isinstance(self.log_probs, list):
-            self.log_probs = (
-                torch.cat(self.log_probs).detach().to(torch.float32).to(self.device)
-            )
-        if isinstance(self.values, list):
-            self.values = (
-                torch.cat(self.values).detach().to(torch.float32).to(self.device)
-            )
-        if isinstance(self.states, list):
-            self.states = torch.cat(self.states).to(torch.float32).to(self.device)
-        if isinstance(self.actions, list):
-            self.actions = torch.cat(self.actions).to(torch.float32).to(self.device)
-        if isinstance(self.advantages, list):
-            self.advantages = self.gaes.squeeze() - self.values.squeeze()
-            self.advantages = (
-                standardize(self.advantages).to(torch.float32).to(self.device)
-            )
-
     def batch_iter(self, mini_batch_size=64):
-        if isinstance(self.states, list):
-            raise RuntimeError(
-                "Please run compute_torch on array memory before using batch_iter."
-            )
         batch_size = self.states.size(0)
+
+        self.advantages = self.gaes.squeeze() - self.values.squeeze()
+        self.advantages = (
+            standardize(self.advantages).to(torch.float32).to(self.device)
+        )
 
         for _ in range(int(m.ceil(batch_size / mini_batch_size))):
             random_selection = np.random.randint(0, batch_size - 1, mini_batch_size)
@@ -190,7 +184,7 @@ class _ArrayActorCriticMemory(object):
             batch.state = self.states[random_selection, :]
             batch.action = self.actions[random_selection, :]
             batch.old_log_prob = self.log_probs[random_selection, :]
-            batch.gae = self.gaes[random_selection, :]
+            batch.gae = self.gaes[random_selection]
             batch.advantage = self.advantages[random_selection]
             yield batch
 
@@ -240,10 +234,12 @@ class ProximalActorCritic(object):
 
     def cuda(self):
         self.actor_critic.cuda()
+        self.memory.cuda()
         self.device = next(self.actor_critic.parameters()).device
 
     def cpu(self):
         self.actor_critic.cpu()
+        self.memory.cpu()
         self.device = next(self.actor_critic.parameters()).device
 
     def get_action(self, state):
@@ -268,32 +264,32 @@ class ProximalActorCritic(object):
         :return:
         """
         gae = 0
-        self.memory.gaes = []
-        for step in reversed(range(len(self.memory.rewards))):
+        self.memory.gaes = torch.empty((0,))
+        for step in reversed(range(self.memory.rewards.numel())):
             delta = (
-                self.memory.rewards[step].to(self.device)
-                + anticipation
-                * self.memory.values[min(step + 1, len(self.memory.rewards) - 1)].to(
-                    self.device
-                )
-                * self.memory.done_masks[step].to(self.device)
-                - self.memory.values[step].to(self.device)
+                    self.memory.rewards[step].to(self.device)
+                    + anticipation
+                    * self.memory.values[min(step + 1, len(self.memory.rewards) - 1)].to(
+                self.device
+            )
+                    * self.memory.done_masks[step].to(self.device)
+                    - self.memory.values[step].to(self.device)
             )
             gae = (
-                delta
-                + anticipation
-                * smoothing
-                * self.memory.done_masks[step].to(self.device)
-                * gae
+                    delta
+                    + anticipation
+                    * smoothing
+                    * self.memory.done_masks[step].to(self.device)
+                    * gae
             )
             # prepend to get correct order back
-            self.memory.gaes.insert(0, gae + self.memory.values[step].to(self.device))
+            self.memory.gaes = torch.cat([self.memory.gaes.to(self.memory.device),
+                                          gae.to(self.memory.device) + self.memory.values[step].to(self.memory.device)])
 
     def update_ppo(
-        self, epochs=10, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
+            self, epochs=10, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
     ):
         self.compute_gae()
-        self.memory.compute_torch()
 
         for _ in range(epochs):
             for mem in self.memory.batch_iter():
@@ -314,7 +310,7 @@ class ProximalActorCritic(object):
                 critic_loss = (mem.gae.to(self.device) - value).pow(2).mean()
 
                 loss = (
-                    critic_discount * critic_loss + actor_loss - entropy_beta * entropy
+                        critic_discount * critic_loss + actor_loss - entropy_beta * entropy
                 )
                 if self.debug:
                     print(loss.item())
@@ -327,3 +323,45 @@ class ProximalActorCritic(object):
 
     def save(self, filename):
         torch.save(self.actor_critic.state_dict(), filename)
+
+
+class ContinualProximalActorCritic(ProximalActorCritic):
+    def __init__(self, num_inputs, num_outputs, max_complexity, std=0.0, memory_len=8):
+        super().__init__(num_inputs, num_outputs, max_complexity, std)
+        self.memory_len = memory_len
+        self.memory.max_size = memory_len
+
+    def update_ppo(
+            self, epochs=1, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
+    ):
+        if len(self.memory) >= self.memory_len:
+            self.compute_gae()
+
+            for _ in range(epochs):
+                for mem in self.memory.batch_iter():
+                    dist, value = self.actor_critic(mem.state.squeeze().to(self.device))
+                    entropy = dist.entropy().mean()
+                    new_log_prob = dist.log_prob(mem.action.to(self.device))
+
+                    ratio = (new_log_prob - mem.old_log_prob.to(self.device)).exp()
+                    actor_loss_1 = ratio * torch.stack(
+                        [mem.advantage] * ratio.shape[-1], dim=-1
+                    ).to(self.device)
+                    actor_loss_2 = torch.clamp(
+                        ratio, 1.0 - ppo_clip, 1.0 + ppo_clip
+                    ) * torch.stack([mem.advantage] * ratio.shape[-1], dim=-1).to(
+                        self.device
+                    )
+                    actor_loss = -torch.min(actor_loss_1, actor_loss_2).mean()
+                    critic_loss = (mem.gae.to(self.device) - value).pow(2).mean()
+
+                    loss = (
+                            critic_discount * critic_loss + actor_loss - entropy_beta * entropy
+                    )
+                    print(loss.item())
+                    loss.detach_()
+                    loss.requires_grad = True
+
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()

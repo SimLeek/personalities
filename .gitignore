@@ -1,3 +1,6 @@
+# AI files
+*.torch
+
 # Data analysis files
 *.csv
 *.xlsx

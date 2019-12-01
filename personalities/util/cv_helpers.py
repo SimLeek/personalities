@@ -14,6 +14,13 @@ def cv_image_to_pytorch(image: np.ndarray, cuda: bool = True) -> torch.Tensor:
     return torch_image
 
 
+def pytorch_image_to_cv(arr: torch.Tensor) -> np.ndarray:
+    np_img = arr.detach().cpu()
+    np_img = np_img[0, ...].squeeze()
+    np_img = np_img.permute((1, 2, 0))
+    return np_img.numpy()
+
+
 # todo: move this to displayarray or relayarray
 def vector_to_2d_encoding(vector: np.ndarray, cuda: bool = True) -> torch.Tensor:
     torch_vec = torch.from_numpy(vector).float()

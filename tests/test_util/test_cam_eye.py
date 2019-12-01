@@ -1,10 +1,42 @@
 from personalities.util.cam_eye import *
 import mock
+import os
+import pytest
+
+
+def test_recognition_system_object():
+    r = RecognitionSystem(1, 2, 3)
+
+    assert r.model == 1
+    assert r.loss_criteria == 2
+    assert r.optimizer == 3
+
+    r = RecognitionSystem()
+
+    assert r.model.is_same_at_start(AutoEncoder(1024))
+    assert isinstance(r.loss_criteria, nn.SmoothL1Loss)
+    assert isinstance(r.optimizer, optim.Adam)
+
+
+def test_recognition_system_serialization():
+    rs = RecognitionSystem()
+
+    assert rs.model.is_same_at_start(AutoEncoder(1024))
+    assert isinstance(rs.loss_criteria, nn.SmoothL1Loss)
+    assert isinstance(rs.optimizer, optim.Adam)
+
+    ser = rs.serialize()
+
+    rs2 = RecognitionSystem.deserialize(ser)
+
+    assert rs2.model.is_same_at_start(AutoEncoder(1024))
+    assert isinstance(rs2.loss_criteria, nn.SmoothL1Loss)
+    assert isinstance(rs2.optimizer, optim.Adam)
 
 
 def test_cam_eye_init():
     with mock.patch(
-        "personalities.util.cam_eye.display"
+            "personalities.util.cam_eye.display"
     ) as mock_cam, mock.patch.object(VirtualEyeWithLens, "_init_cam") as mock_mouse_loop:
         ceye = VirtualEyeWithLens()
 
@@ -29,18 +61,86 @@ def test_cam_eye_init():
         assert ceye.crop_settings.POST_LENS == (256, 256, 3)
 
 
-def test_recognition_system_object():
-    r = RecognitionSystem(1, 2, 3)
+def test_cam_eye_serialization():
+    with mock.patch.object(VirtualEyeWithLens, "_init_cam", autospec=True) as mock_cam:
+        def new_cam(self, cam):
+            cam_mock = mock.MagicMock()
+            if not isinstance(cam, list):
+                cam = [cam]
+            cam_mock.source_names = cam
+            self.cam = cam_mock
 
-    assert r.model == 1
-    assert r.loss_criteria == 2
-    assert r.optimizer == 3
+        mock_cam.side_effect = new_cam
 
-    r = RecognitionSystem()
+        ceye = VirtualEyeWithLens("Hi!")
 
-    assert r.model.is_same_at_start(AutoEncoder(1024))
-    assert isinstance(r.loss_criteria, nn.SmoothL1Loss)
-    assert isinstance(r.optimizer, optim.Adam)
+        cserial = ceye.serialize_full()
+        ceye2 = VirtualEyeWithLens.deserialize_full(cserial)
+
+        assert ceye2.cam.source_names == ["Hi!"]
+
+        assert ceye2.yields.LOSS
+        assert ceye2.yields.ENCODING
+
+        assert ceye2.recognition_system.model.is_same_at_start(AutoEncoder(1024))
+        assert isinstance(ceye2.recognition_system.loss_criteria, nn.SmoothL1Loss)
+        assert isinstance(ceye2.recognition_system.optimizer, optim.Adam)
+
+        assert ceye2.movement_encoding_widths.CENTER_X == 4
+        assert ceye2.movement_encoding_widths.CENTER_Y == 4
+        assert ceye2.movement_encoding_widths.CENTER_DX == 4
+        assert ceye2.movement_encoding_widths.CENTER_DY == 4
+        assert ceye2.movement_encoding_widths.ZOOM == 4
+        assert ceye2.movement_encoding_widths.DZOOM == 4
+        assert ceye2.movement_encoding_widths.BARREL == 4
+        assert ceye2.movement_encoding_widths.DBARREL == 4
+
+        assert ceye2.crop_settings.CAM_SIZE_REQUEST == (99999, 99999)
+        assert ceye2.crop_settings.PRE_LENS == (480, 640, 3)
+        assert ceye2.crop_settings.POST_LENS == (256, 256, 3)
+
+
+# @pytest.mark.skip("Not saving to the file system.")
+def test_cam_eye_save_and_load():
+    with mock.patch.object(VirtualEyeWithLens, "_init_cam", autospec=True) as mock_cam:
+        def new_cam(self, cam):
+            cam_mock = mock.MagicMock()
+            if not isinstance(cam, list):
+                cam = [cam]
+            cam_mock.source_names = cam
+            self.cam = cam_mock
+
+        try:
+            mock_cam.side_effect = new_cam
+
+            ceye = VirtualEyeWithLens("Hi!")
+
+            ceye.save("test_cam_eye_save_and_load.torch")
+            ceye2 = VirtualEyeWithLens.load("test_cam_eye_save_and_load.torch")
+
+            assert ceye2.cam.source_names == ["Hi!"]
+
+            assert ceye2.yields.LOSS
+            assert ceye2.yields.ENCODING
+
+            assert ceye2.recognition_system.model.is_same_at_start(AutoEncoder(1024))
+            assert isinstance(ceye2.recognition_system.loss_criteria, nn.SmoothL1Loss)
+            assert isinstance(ceye2.recognition_system.optimizer, optim.Adam)
+
+            assert ceye2.movement_encoding_widths.CENTER_X == 4
+            assert ceye2.movement_encoding_widths.CENTER_Y == 4
+            assert ceye2.movement_encoding_widths.CENTER_DX == 4
+            assert ceye2.movement_encoding_widths.CENTER_DY == 4
+            assert ceye2.movement_encoding_widths.ZOOM == 4
+            assert ceye2.movement_encoding_widths.DZOOM == 4
+            assert ceye2.movement_encoding_widths.BARREL == 4
+            assert ceye2.movement_encoding_widths.DBARREL == 4
+
+            assert ceye2.crop_settings.CAM_SIZE_REQUEST == (99999, 99999)
+            assert ceye2.crop_settings.PRE_LENS == (480, 640, 3)
+            assert ceye2.crop_settings.POST_LENS == (256, 256, 3)
+        finally:
+            os.remove("test_cam_eye_save_and_load.torch")
 
 
 def test_set_focal_point():
