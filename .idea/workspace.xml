@@ -2,13 +2,14 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="069bb104-073d-4255-a688-52f58934d136" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/personalities/util/desk_io.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/personalities/base/arch.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/personalities/base/nn_utils.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/personalities/base/odst.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/personalities/base/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/personalities/base/actor_critic.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/actor_critic.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/util/cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/cam_eye.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/util/cv_helpers.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/cv_helpers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_util/test_cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_util/test_cam_eye.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/util/desk_io.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/desk_io.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -200,6 +201,12 @@
         <watch expression="self.bad_actions" language="Python" />
         <watch expression="self.bad_actions" language="Python" />
         <watch expression="loss.item()" language="Python" />
+      </configuration>
+      <configuration name="PythonConfigurationType">
+        <watch expression="self.memory.gaes" language="Python" />
+        <watch expression="self.feature_selection_logits" language="Python" />
+        <watch expression="input.shape" language="Python" />
+        <watch expression="self.feature_selection_logits.shape" language="Python" />
       </configuration>
     </watches-manager>
   </component>

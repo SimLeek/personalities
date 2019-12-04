@@ -5,6 +5,8 @@ import torch.optim as optim
 from typing import List
 import numpy as np
 import math as m
+from .odst import ODST
+from .nn_utils import Lambda
 
 
 class ActorCritic(nn.Module):
@@ -16,19 +18,28 @@ class ActorCritic(nn.Module):
     def __init__(self, num_inputs, num_outputs, max_complexity, std=0.0):
         super(ActorCritic, self).__init__()
 
+        layers = 8
+        trees = 256
+
         self.critic = nn.Sequential(
-            nn.Linear(num_inputs + num_outputs, max_complexity),
-            nn.ReLU(),
-            nn.Linear(max_complexity, 1),
+            ODST(in_features=num_inputs + num_outputs,
+                 num_trees=max_complexity,
+                 tree_dim=1,
+                 flatten_output=False,
+                 depth=6),
+            Lambda(lambda x: x.mean(1))
         )
 
         self.num_outputs = num_outputs
         self.out_feedback = torch.zeros((1, num_outputs))
 
         self.actor = nn.Sequential(
-            nn.Linear(num_inputs + num_outputs, max_complexity),
-            nn.ReLU(),
-            nn.Linear(max_complexity, num_outputs),
+            ODST(in_features=num_inputs + num_outputs,
+                 num_trees=max_complexity,
+                 tree_dim=num_outputs,
+                 flatten_output=False,
+                 depth=6),
+            Lambda(lambda x: x.mean(1))
         )
 
         self.log_std = nn.Parameter(torch.ones(1, num_outputs) * std)
@@ -57,8 +68,9 @@ class ActorCritic(nn.Module):
             if self.out_feedback.ndim > 1:
                 self.out_feedback = self.out_feedback[-1, ...]  # get last of batch
             x = torch.cat((x, self.out_feedback))
-        value = self.critic(x)
-        mu = self.actor(x)
+        with torch.no_grad():
+            value = self.critic(x)
+            mu = self.actor(x)
         if x.ndim == 2:
             expand = mu
         else:
@@ -263,9 +275,11 @@ class ProximalActorCritic(object):
         :param smoothing:
         :return:
         """
-        gae = 0
-        self.memory.gaes = torch.empty((0,))
-        for step in reversed(range(self.memory.rewards.numel())):
+        if self.memory.gaes.numel() > 0:
+            gae = self.memory.gaes[-1].item()
+        else:
+            gae = 0
+        for step in reversed(range(self.memory.gaes.numel() - 1, self.memory.rewards.numel())):
             delta = (
                     self.memory.rewards[step].to(self.device)
                     + anticipation
@@ -285,6 +299,8 @@ class ProximalActorCritic(object):
             # prepend to get correct order back
             self.memory.gaes = torch.cat([self.memory.gaes.to(self.memory.device),
                                           gae.to(self.memory.device) + self.memory.values[step].to(self.memory.device)])
+            if self.memory.gaes.numel() > self.memory.rewards.numel():
+                self.memory.gaes = self.memory.gaes[1:]
 
     def update_ppo(
             self, epochs=10, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001

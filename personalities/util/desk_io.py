@@ -10,6 +10,7 @@ from personalities.util.cv_helpers import cv_image_to_pytorch, vector_to_2d_enco
 from coordencode import ints_to_2d, int_to_1d
 import math as m
 from personalities.util.simple_auto_encoder_256 import AutoEncoder
+import pyautogui
 
 
 class ScreenWatcher(object):
@@ -56,6 +57,7 @@ class ScreenWatcher(object):
 
         self.loss = 0
         self.reward = 0
+        self.mouse = False
 
         if torch.cuda.is_available():
             self.recognition_system.model.cuda()
@@ -216,6 +218,8 @@ class ScreenWatcher(object):
 
         self.x = self.state.center[0]
         self.y = self.state.center[1]
+        if self.mouse:
+            pyautogui.moveTo(self.x * self.input_size[0], self.y * self.input_size[1])
         self.w = self.h = self.state.zoom * self.crop_settings.POST_LENS[0]
 
     def _punish_out_of_bounds_actions(self):
@@ -417,32 +421,39 @@ class ScreenWatcher(object):
 
 if __name__ == "__main__":
     from personalities.base.actor_critic import ContinualProximalActorCritic
+    import pyautogui
 
     eye = ScreenWatcher()
+    #eye.mouse = True
+    pyautogui.FAILSAFE = False
     pac = None
     i = 1
     for encoding, loss in eye:
         if pac is None:
-            pac = ContinualProximalActorCritic(encoding.numel(), 8, 256, memory_len=16)
+            pac = ContinualProximalActorCritic(encoding.numel(), 10, 64, memory_len=128)
             pac.cuda()
         else:
-            reward = (loss*10 / (1 + eye.bad_actions * 10)) - eye.bad_actions * 10
+            reward = (loss * 10 / (1 + eye.bad_actions * 10)) - eye.bad_actions * 10
             print(loss.item(), reward.item(), end=', ')
-            # with open("reward_hist.csv", "a+") as reward_file:
-            #    reward_file.write(f"{reward},\n")
+            with open("reward_hist.csv", "a+") as reward_file:
+               reward_file.write(f"{reward},\n")
             pac.memory.update(reward=reward, done=[0])
             eye.loss = loss.detach().item()
             eye.reward = reward.detach().item()
         action = pac.get_action(encoding).squeeze()
         if action[0] > 1:
             eye.set_focal_point(
-                0.5 + (action[2:4].cpu().numpy() / 100),
-                0.5 + (action[4].cpu().item() / 100),
+                0.5 + (action[2:4].cpu().numpy()*action[8].cpu().numpy()),
+                0.5 + (action[4].cpu().item()),
             )
         if action[1] > 1:
             eye.move_focal_point(
-                action[5:7].cpu().numpy() / 100,
-                action[7].cpu().item() / 100,
+                action[5:7].cpu().numpy()*action[9].cpu().numpy(),
+                action[7].cpu().item(),
             )
+        #if action[8] > 1:
+        #    pyautogui.mouseDown(*pyautogui.position(), pyautogui.PRIMARY)
+        #if action[9] > 1:
+        #    pyautogui.mouseDown(*pyautogui.position(), pyautogui.SECONDARY)
         pac.update_ppo()
         i += 1
