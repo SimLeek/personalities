@@ -10,19 +10,27 @@ from .nn_utils import Lambda
 
 
 class ActorCritic(nn.Module):
+    """
+    An actor critic model. The actor neural network decides which outputs to give given the current inputs
+    (environment, memory, etc.) The critic rates how good that action was, and can be used for training the actor.
+    """
+
     # from: https://github.com/colinskow/move37/
-    # todo: needs to be variational. Replace the nn.Linear with a new model based on
-    #  this link: https://luiarthur.github.io/statorial/varinf/linregpy/
-    #  Then, prune away neurons that aren't used, and reduce/expand
-    #  when needed.
     def __init__(self, num_inputs, num_outputs, max_complexity, std=0.0):
+        """
+        An actor critic model. The actor neural network decides which outputs to give given the current inputs
+        (environment, memory, etc.) The critic rates how good that action was, and can be used for training the actor.
+
+        :param num_inputs: number of float input numbers used to represent the current state or other input factors.
+        :param num_outputs: max number of outputs the actor can give
+        :param max_complexity: number of contrasting options there are to reach the goal. Also number of trees in
+        networks.
+        :param std: standard deviation of the output
+        """
         super(ActorCritic, self).__init__()
 
-        layers = 8
-        trees = 256
-
         self.critic = nn.Sequential(
-            ODST(in_features=num_inputs + num_outputs,
+            ODST(in_features=num_inputs + num_outputs + 1,
                  num_trees=max_complexity,
                  tree_dim=1,
                  flatten_output=False,
@@ -32,9 +40,10 @@ class ActorCritic(nn.Module):
 
         self.num_outputs = num_outputs
         self.out_feedback = torch.zeros((1, num_outputs))
+        self.val_feedback = torch.zeros((1, 1))
 
         self.actor = nn.Sequential(
-            ODST(in_features=num_inputs + num_outputs,
+            ODST(in_features=num_inputs + num_outputs + 1,
                  num_trees=max_complexity,
                  tree_dim=num_outputs,
                  flatten_output=False,
@@ -44,8 +53,41 @@ class ActorCritic(nn.Module):
 
         self.log_std = nn.Parameter(torch.ones(1, num_outputs) * std)
 
-    def forward(self, x):
-        if x.ndim == 2:
+    def _append_prev_val_to_x(self, x: torch.Tensor):
+        """
+        Append the previous output tensor to the input state.
+
+        Note: this must be accounted for in init by changing the input size.
+        """
+        if x.ndimension() == 2:
+            if self.val_feedback.ndim == 3:
+                self.val_feedback = self.val_feedback.to(x.device)
+                if self.val_feedback.shape[0] == 1 and x.shape[0] > 1:
+                    self.val_feedback = torch.cat(
+                        [self.val_feedback] * x.shape[0], dim=0
+                    )
+                x = torch.cat((x, self.val_feedback), dim=1)
+            else:
+                val_fb = self.val_feedback.type_as(x).squeeze()
+                if val_fb.ndim == 0:
+                    val_fb = val_fb.unsqueeze(0)
+                x = torch.cat(
+                    (x, torch.stack([val_fb] * x.shape[0], dim=0)), dim=1
+                )
+        else:
+            if self.val_feedback.ndim > 1:
+                self.val_feedback = self.val_feedback[-1, ...]
+            x = torch.cat((x, self.val_feedback.type_as(x).squeeze().unsqueeze(0)))
+        return x
+
+    def _append_prev_out_to_x(self, x: torch.Tensor):
+        """
+        Append the previous output tensor to the input state.
+
+        Note: this must be accounted for in init by changing the input size.
+        """
+
+        if x.ndimension() == 2:
             if self.out_feedback.ndim == 3:
                 self.out_feedback = self.out_feedback.to(x.device).squeeze(dim=0)
                 if self.out_feedback.shape[0] == 1 and x.shape[0] > 1:
@@ -68,10 +110,15 @@ class ActorCritic(nn.Module):
             if self.out_feedback.ndim > 1:
                 self.out_feedback = self.out_feedback[-1, ...]  # get last of batch
             x = torch.cat((x, self.out_feedback))
+        return x
+
+    def forward(self, x):
+        x = self._append_prev_out_to_x(x)
+        x = self._append_prev_val_to_x(x)
         with torch.no_grad():
             value = self.critic(x)
             mu = self.actor(x)
-        if x.ndim == 2:
+        if x.ndimension() == 2:
             expand = mu
         else:
             expand = mu.view(1, self.num_outputs)
@@ -79,6 +126,7 @@ class ActorCritic(nn.Module):
         dist = Normal(mu, std)
         self.out_feedback = dist.mean[None, :]
         self.out_feedback = self.out_feedback.detach()
+        self.val_feedback = value.detach()
         return dist, value
 
 
@@ -96,8 +144,16 @@ def standardize(x: torch.Tensor, machine_epsilon=1e-8):
     return x
 
 
-class _ArrayActorCriticMemory(object):
+class _QueueActorCriticMemory(object):
+    """Holds memory for an actor critic learner."""
+
     def __init__(self, device, max_size=float('inf')):
+        """
+        Holds memory for an actor critic module.
+
+        :param device: cpu or gpu device to run on.
+        :param max_size: Max size of the memory. Note: this needs to be finite for PPO to learn.
+        """
         self.device = device
 
         self.last_action = None
@@ -120,6 +176,7 @@ class _ArrayActorCriticMemory(object):
         return self.values.numel()
 
     def cuda(self):
+        """Change all memory to run on a cuda device."""
         self.log_probs.cuda()
         self.values.cuda()
         self.rewards.cuda()
@@ -131,6 +188,7 @@ class _ArrayActorCriticMemory(object):
         self.device = self.values.device
 
     def cpu(self):
+        """Change all memory to run on a cpu."""
         self.log_probs.cpu()
         self.values.cpu()
         self.rewards.cpu()
@@ -142,6 +200,7 @@ class _ArrayActorCriticMemory(object):
         self.device = self.values.device
 
     def reset(self):
+        """Reset all memory to empty queues."""
         self.log_probs = torch.empty((0,)).to(self.device)
         self.values = torch.empty((0,)).to(self.device)
         self.rewards = torch.empty((0,)).to(self.device)
@@ -151,6 +210,7 @@ class _ArrayActorCriticMemory(object):
         return self
 
     def update(self, reward, done):
+        """Add a memory to the queue. Pop front if there are more than max_size memories."""
         log_prob = self.last_dist.log_prob(self.last_action).to(self.device)
         if len(self) < self.max_size:
             self.log_probs = torch.cat([self.log_probs, log_prob])
@@ -183,6 +243,7 @@ class _ArrayActorCriticMemory(object):
         return self
 
     def batch_iter(self, mini_batch_size=64):
+        """Iterate through random batches of memories"""
         batch_size = self.states.size(0)
 
         self.advantages = self.gaes.squeeze() - self.values.squeeze()
@@ -202,6 +263,7 @@ class _ArrayActorCriticMemory(object):
 
 
 class _ArrayActorCriticMemoryBatch(object):
+    """A single batch of actor critic memory."""
     state: torch.Tensor
     action: torch.Tensor
     old_log_prob: torch.Tensor
@@ -216,45 +278,37 @@ class ProximalActorCritic(object):
     """
     An actor critic that can memorize its recent decisions so it can learn
     to optimize long term tasks.
-
-    >>> acwm = ProximalActorCritic(5, 2, 256)
-    >>> acwm.memory.reset()
-    >>> while True:
-    >>>   for action in range(len(512)):
-    ...     # ... compute state here ...
-    ...     action = acwm.get_action(state)
-    ...     mouse.x = action[0]
-    ...     mouse.y = action[1]
-    ...     # Compute reward here. For curiosity, use loss of an autoencoder.
-    ...     acwm.memory.update(reward=[1,0], done=[0])
-    >>>   acwm.update_ppo()
     """
 
     _LEARNING_RATE = 1e-4
 
     def __init__(self, num_inputs, num_outputs, max_complexity, std=0.0):
-        self.actor_critic = ActorCritic(
+        """Create an actor critic that can optimize for long term tasks."""
+        self.actor_critic: nn.Module = ActorCritic(
             num_inputs, num_outputs, max_complexity, std=std
         )
         self.optimizer = optim.Adam(
             self.actor_critic.parameters(), lr=self._LEARNING_RATE
         )
         self.device = next(self.actor_critic.parameters()).device
-        self.memory = _ArrayActorCriticMemory(self.device)
+        self.memory = _QueueActorCriticMemory(self.device)
 
         self.debug = False
 
     def cuda(self):
+        """Set every part of this model to run on a cuda device."""
         self.actor_critic.cuda()
         self.memory.cuda()
         self.device = next(self.actor_critic.parameters()).device
 
     def cpu(self):
+        """Set every part of this model to run on a cpu device."""
         self.actor_critic.cpu()
         self.memory.cpu()
         self.device = next(self.actor_critic.parameters()).device
 
     def get_action(self, state):
+        """Get the action the actor will take for a given state."""
         state: torch.Tensor = state.to(torch.float32).to(self.device)
         dist, value = self.actor_critic(state.squeeze())
         self.memory.last_dist = dist
@@ -342,7 +396,11 @@ class ProximalActorCritic(object):
 
 
 class ContinualProximalActorCritic(ProximalActorCritic):
+    """An actor critic that can learn to optimize long term, sparse reward, without stopping every ~200 frames."""
+
     def __init__(self, num_inputs, num_outputs, max_complexity, std=0.0, memory_len=8):
+        """Create an actor critic that can continually optimize for long term tasks."""
+
         super().__init__(num_inputs, num_outputs, max_complexity, std)
         self.memory_len = memory_len
         self.memory.max_size = memory_len

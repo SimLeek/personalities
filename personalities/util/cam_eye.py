@@ -151,6 +151,31 @@ class VirtualEyeWithLens(object):
         if torch.cuda.is_available():
             self.recognition_system.model.cuda()
 
+    def run(self, csv_reward=False):
+        from personalities.base.actor_critic import ContinualProximalActorCritic
+
+        pac = None
+        for encoding, loss in self:
+            if pac is None:
+                pac = ContinualProximalActorCritic(encoding.numel(), 4, 64, memory_len=4)
+                pac.cuda()
+            else:
+                reward = (loss * 10 / (1 + self.bad_actions)) - self.bad_actions * 10
+                print(loss.item(), reward.item(), end=', ')
+                if csv_reward:
+                    with open("reward_hist.csv", "a+") as reward_file:
+                        reward_file.write(f"{reward},\n")
+                pac.memory.update(reward=reward, done=[0])
+                # self.loss = loss.detach().item()
+                # self.reward = reward.detach().item()
+            action = pac.get_action(encoding).squeeze()
+            self.move_focal_point(
+                action[:2].cpu().numpy() / 10,
+                action[2].cpu().item() / 10,
+                action[3].cpu().item() / 10,
+            )
+            pac.update_ppo()
+
     def set_focal_point(self, center_x_y: np.ndarray, zoom, barrel):
         """Set where we'll focus in the next frame once we can move."""
         self.state.unclipped_center = center_x_y.copy()
@@ -504,28 +529,5 @@ class VirtualEyeWithLens(object):
 
 
 if __name__ == "__main__":
-    from personalities.base.actor_critic import ProximalActorCritic
-
     eye = VirtualEyeWithLens()
-    pac = None
-    i = 1
-    for encoding, loss in eye:
-        if pac is None:
-            pac = ProximalActorCritic(encoding.numel(), 4, 256)
-            pac.cuda()
-        else:
-            reward = (loss*10 / (1 + eye.bad_actions)) - eye.bad_actions * 10
-            print(loss.item(), reward.item(), end=', ')
-            # with open("reward_hist.csv", "a+") as reward_file:
-            #    reward_file.write(f"{reward},\n")
-            pac.memory.update(reward=reward, done=[0])
-        action = pac.get_action(encoding).squeeze()
-        eye.move_focal_point(
-            action[:2].cpu().numpy()/10,
-            action[2].cpu().item()/10,
-            action[3].cpu().item()/10,
-        )
-        if i % 32 == 0:
-            pac.update_ppo()
-            pac.memory.reset()
-        i += 1
+    eye.run()

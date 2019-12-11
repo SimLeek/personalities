@@ -63,6 +63,49 @@ class ScreenWatcher(object):
             self.recognition_system.model.cuda()
             self.recognition_system.loss_criteria.cuda()
 
+    def run(self, control_mouse=False, controllable_keys=(), csv_reward=False):
+        from personalities.base.actor_critic import ContinualProximalActorCritic
+        import pyautogui
+
+        if control_mouse:
+            self.mouse = True
+            pyautogui.FAILSAFE = False
+        pac = None
+
+        outputs = 10 + bool(control_mouse) * 2
+
+        for encoding, loss in self:
+            if pac is None:
+                pac = ContinualProximalActorCritic(encoding.numel(), outputs, 64, memory_len=2)
+                pac.cuda()
+            else:
+                reward = (loss * 10 / (1 + self.bad_actions * 10)) - self.bad_actions * 10
+                print(loss.item(), reward.item(), end=', ')
+                if csv_reward:
+                    with open("reward_hist.csv", "a+") as reward_file:
+                        reward_file.write(f"{reward},\n")
+                pac.memory.update(reward=reward, done=[0])
+                self.loss = loss.detach().item()
+                self.reward = reward.detach().item()
+            action = pac.get_action(encoding).squeeze()
+            if action[0] > 1:
+                self.set_focal_point(
+                    0.5 + (action[2:4].cpu().numpy() * action[8].cpu().numpy()),
+                    0.5 + (action[4].cpu().item()),
+                )
+            if action[1] > 1:
+                self.move_focal_point(
+                    action[5:7].cpu().numpy() * action[9].cpu().numpy(),
+                    action[7].cpu().item(),
+                )
+            if control_mouse:
+                if action[10] > 1:
+                    pyautogui.mouseDown(*pyautogui.position(), pyautogui.PRIMARY)
+                if action[11] > 1:
+                    pyautogui.mouseDown(*pyautogui.position(), pyautogui.SECONDARY)
+
+            pac.update_ppo()
+
     def set_focal_point(self, center_x_y: np.ndarray, zoom):
         """Set where we'll focus in the next frame once we can move."""
         self.state.unclipped_center = center_x_y.copy()
@@ -407,53 +450,14 @@ class ScreenWatcher(object):
             top = center_y * self.input_size[1] - h / 2.0
             left = center_x * self.input_size[0] - w / 2.0
             box = {"top": int(top), "left": int(left), "width": int(w), "height": int(h)}
-            # try:
             self.input_size = np.asarray([sct.monitors[0]['width'], sct.monitors[0]['height']])
             screen_image = np.array(sct.grab(box))
             out_image = np.array(
                 Image.fromarray(screen_image).resize(self.crop_settings.POST_LENS[:2], Image.BICUBIC)
             )
-            # except mss.exception.ScreenShotError as scw_err:
-            #    print("scw failed again. :|")
-            #    out_image = np.zeros(self.crop_settings.POST_LENS)
             return out_image[..., :3]
 
 
 if __name__ == "__main__":
-    from personalities.base.actor_critic import ContinualProximalActorCritic
-    import pyautogui
-
     eye = ScreenWatcher()
-    #eye.mouse = True
-    pyautogui.FAILSAFE = False
-    pac = None
-    i = 1
-    for encoding, loss in eye:
-        if pac is None:
-            pac = ContinualProximalActorCritic(encoding.numel(), 10, 64, memory_len=128)
-            pac.cuda()
-        else:
-            reward = (loss * 10 / (1 + eye.bad_actions * 10)) - eye.bad_actions * 10
-            print(loss.item(), reward.item(), end=', ')
-            with open("reward_hist.csv", "a+") as reward_file:
-               reward_file.write(f"{reward},\n")
-            pac.memory.update(reward=reward, done=[0])
-            eye.loss = loss.detach().item()
-            eye.reward = reward.detach().item()
-        action = pac.get_action(encoding).squeeze()
-        if action[0] > 1:
-            eye.set_focal_point(
-                0.5 + (action[2:4].cpu().numpy()*action[8].cpu().numpy()),
-                0.5 + (action[4].cpu().item()),
-            )
-        if action[1] > 1:
-            eye.move_focal_point(
-                action[5:7].cpu().numpy()*action[9].cpu().numpy(),
-                action[7].cpu().item(),
-            )
-        #if action[8] > 1:
-        #    pyautogui.mouseDown(*pyautogui.position(), pyautogui.PRIMARY)
-        #if action[9] > 1:
-        #    pyautogui.mouseDown(*pyautogui.position(), pyautogui.SECONDARY)
-        pac.update_ppo()
-        i += 1
+    eye.run()

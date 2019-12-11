@@ -2,13 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="069bb104-073d-4255-a688-52f58934d136" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/personalities/base/arch.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/personalities/base/nn_utils.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/personalities/base/odst.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/personalities/base/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/personalities/base/actor_critic.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/actor_critic.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/util/cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/cam_eye.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/personalities/util/desk_io.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/desk_io.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -207,6 +203,11 @@
         <watch expression="self.feature_selection_logits" language="Python" />
         <watch expression="input.shape" language="Python" />
         <watch expression="self.feature_selection_logits.shape" language="Python" />
+        <watch expression="torch.as_tensor(1)" language="Python" />
+        <watch expression="torch.as_tensor(1).float().exp()" language="Python" />
+        <watch expression="self.log_std.exp()" language="Python" />
+        <watch expression="self.val_feedback" language="Python" />
+        <watch expression="val_fb.unsqueeze(0)" language="Python" />
       </configuration>
     </watches-manager>
   </component>
