@@ -73,20 +73,25 @@ class ScreenWatcher(object):
         pac = None
 
         outputs = 10 + bool(control_mouse) * 2
+        prev_loss = 0
 
         for encoding, loss in self:
             if pac is None:
-                pac = ContinualProximalActorCritic(encoding.numel(), outputs, 64, memory_len=2)
+                pac = ContinualProximalActorCritic(encoding.numel(), outputs, 64, memory_len=64)
                 pac.cuda()
             else:
-                reward = (loss * 10 / (1 + self.bad_actions * 10)) - self.bad_actions * 10
-                print(loss.item(), reward.item(), end=', ')
+                diff_loss = prev_loss-loss.detach().item()
+                prev_loss = loss.item()
+                if diff_loss<0:
+                    diff_loss = m.sqrt(abs(diff_loss))
+                reward = (diff_loss * 10 / (1 + self.bad_actions * 10)) - self.bad_actions * 10
+                print(loss.item(), diff_loss, reward, end=', ')
                 if csv_reward:
                     with open("reward_hist.csv", "a+") as reward_file:
                         reward_file.write(f"{reward},\n")
                 pac.memory.update(reward=reward, done=[0])
-                self.loss = loss.detach().item()
-                self.reward = reward.detach().item()
+                self.loss = diff_loss
+                self.reward = reward
             action = pac.get_action(encoding).squeeze()
             if action[0] > 1:
                 self.set_focal_point(

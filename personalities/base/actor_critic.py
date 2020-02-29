@@ -216,7 +216,7 @@ class _QueueActorCriticMemory(object):
             self.log_probs = torch.cat([self.log_probs, log_prob])
             self.values = torch.cat([self.values, self.last_value.to(self.device)])
             self.rewards = torch.cat([self.rewards,
-                                      reward.clone()
+                                      torch.tensor([reward])
                                      .detach()
                                      .to(torch.float32)
                                      .unsqueeze(0)
@@ -230,7 +230,7 @@ class _QueueActorCriticMemory(object):
             self.log_probs = torch.cat([self.log_probs[1:], log_prob])
             self.values = torch.cat([self.values[1:], self.last_value.to(self.device)])
             self.rewards = torch.cat([self.rewards[1:],
-                                      reward.clone()
+                                      torch.tensor([reward])
                                      .detach()
                                      .to(torch.float32)
                                      .unsqueeze(0)
