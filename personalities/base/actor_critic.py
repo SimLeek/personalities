@@ -147,14 +147,14 @@ def standardize(x: torch.Tensor, machine_epsilon=1e-8):
 class _QueueActorCriticMemory(object):
     """Holds memory for an actor critic learner."""
 
-    def __init__(self, device, max_size=float('inf')):
+    def __init__(self, max_size=float('inf')):
         """
         Holds memory for an actor critic module.
 
         :param device: cpu or gpu device to run on.
         :param max_size: Max size of the memory. Note: this needs to be finite for PPO to learn.
         """
-        self.device = device
+        self.device = None
 
         self.last_action = None
         self.last_dist = None
@@ -171,6 +171,47 @@ class _QueueActorCriticMemory(object):
         self.advantages: torch.Tensor = torch.empty((0,))
 
         self.max_size = max_size
+
+    def to(self, device):
+        self.device = device
+        return self
+
+    def serialize(self):
+        ser = {
+            'last_action': self.last_action,
+            'last_dist': self.last_dist,
+            'last_value': self.last_value,
+            'last_state': self.last_state,
+            'log_probs': self.log_probs,
+            'values': self.values,
+            'rewards': self.rewards,
+            'done_masks': self.done_masks,
+            'states': self.states,
+            'actions': self.actions,
+            'gaes': self.gaes,
+            'advantages': self.advantages,
+            'max_size': self.max_size
+        }
+        return ser
+
+    @classmethod
+    def deserialize(cls, cereal):
+        de = cls(cereal['max_size'])
+
+        de.last_action = cereal['last_action']
+        de.last_dist = cereal['last_dist']
+        de.last_value = cereal['last_value']
+        de.last_state = cereal['last_state']
+        de.log_probs = cereal['log_probs']
+        de.values = cereal['values']
+        de.rewards = cereal['rewards']
+        de.done_masks = cereal['done_masks']
+        de.states = cereal['states']
+        de.actions = cereal['actions']
+        de.gaes = cereal['gaes']
+        de.advantages = cereal['advantages']
+
+        return de
 
     def __len__(self):
         return self.values.numel()
@@ -284,6 +325,11 @@ class ProximalActorCritic(object):
 
     def __init__(self, num_inputs, num_outputs, max_complexity, std=0.0):
         """Create an actor critic that can optimize for long term tasks."""
+        self._num_inputs = num_inputs
+        self._num_outputs = num_outputs
+        self._max_complexity = max_complexity
+        self._std = std
+
         self.actor_critic: nn.Module = ActorCritic(
             num_inputs, num_outputs, max_complexity, std=std
         )
@@ -291,9 +337,39 @@ class ProximalActorCritic(object):
             self.actor_critic.parameters(), lr=self._LEARNING_RATE
         )
         self.device = next(self.actor_critic.parameters()).device
-        self.memory = _QueueActorCriticMemory(self.device)
+        self.memory = _QueueActorCriticMemory().to(self.device)
 
         self.debug = False
+
+    @property
+    def ready_to_update(self):
+        return self.memory.last_dist is not None
+
+    def serialize(self):
+        state = {
+            'num_inputs': self._num_inputs,
+            'num_outputs': self._num_outputs,
+            'max_complexity': self._max_complexity,
+            'std': self._std,
+            'actor_critic_state': self.actor_critic.state_dict(),
+            'optimizer_state': self.optimizer.state_dict(),
+            'memory': self.memory.serialize()
+        }
+        return state
+
+    @classmethod
+    def deserialize(cls, cereal):
+        de = cls(
+            num_inputs=cereal['num_inputs'],
+            num_outputs=cereal['num_outputs'],
+            max_complexity=cereal['max_complexity'],
+            std=cereal['std']
+        )
+        de.actor_critic.load_state_dict(cereal['actor_critic_state'])
+        de.optimizer.load_state_dict(cereal['optimizer_state'])
+        de.memory = de.memory.deserialize(cereal['memory'])
+
+        return de
 
     def cuda(self):
         """Set every part of this model to run on a cuda device."""
@@ -382,8 +458,6 @@ class ProximalActorCritic(object):
                 loss = (
                         critic_discount * critic_loss + actor_loss - entropy_beta * entropy
                 )
-                if self.debug:
-                    print(loss.item())
                 loss.detach_()
                 loss.requires_grad = True
 
@@ -392,7 +466,7 @@ class ProximalActorCritic(object):
                 self.optimizer.step()
 
     def save(self, filename):
-        torch.save(self.actor_critic.state_dict(), filename)
+        torch.save(self.serialize(), filename)
 
 
 class ContinualProximalActorCritic(ProximalActorCritic):

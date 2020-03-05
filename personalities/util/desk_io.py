@@ -11,6 +11,7 @@ from coordencode import ints_to_2d, int_to_1d
 import math as m
 from personalities.util.simple_auto_encoder_256 import AutoEncoder
 import pyautogui
+from personalities.base.actor_critic import ContinualProximalActorCritic
 
 
 class ScreenWatcher(object):
@@ -30,12 +31,16 @@ class ScreenWatcher(object):
         unclipped_barrel: Optional[float] = None
 
     def __init__(self,
+                 action_system=ContinualProximalActorCritic(
+                     num_inputs=2782, num_outputs=10, max_complexity=64, memory_len=64
+                 ),
                  recognition_system=RecognitionSystem(model=AutoEncoder(782)),
                  yields: CamYield = CamYield(),
                  movement_encoding_widths: MovementEncodingWidth = MovementEncodingWidth(),
-                 crop_settings: CropSettings = CropSettings(),
-                 ):
-        """Create a virtual eye that can run on your desktop and control your computer and mouse."""
+                 crop_settings: CropSettings = CropSettings()):
+        """Create a virtual eye that can run on your desktop and control your computer and mouse.
+        :param action_system:
+        """
 
         self.yields = yields
         self.recognition_system = recognition_system
@@ -59,40 +64,39 @@ class ScreenWatcher(object):
         self.reward = 0
         self.mouse = False
 
+        self.action_system = action_system
+
         if torch.cuda.is_available():
             self.recognition_system.model.cuda()
             self.recognition_system.loss_criteria.cuda()
+            self.action_system.cuda()
 
     def run(self, control_mouse=False, controllable_keys=(), csv_reward=False):
-        from personalities.base.actor_critic import ContinualProximalActorCritic
         import pyautogui
 
-        if control_mouse:
+        if control_mouse:  # note: if true, add num_mouse_controls to action_system output
             self.mouse = True
             pyautogui.FAILSAFE = False
-        pac = None
 
-        outputs = 10 + bool(control_mouse) * 2
         prev_loss = 0
 
         for encoding, loss in self:
-            if pac is None:
-                pac = ContinualProximalActorCritic(encoding.numel(), outputs, 64, memory_len=64)
-                pac.cuda()
-            else:
-                diff_loss = prev_loss-loss.detach().item()
+            if self.action_system.ready_to_update:
+                diff_loss = loss.detach().item() - prev_loss
                 prev_loss = loss.item()
-                if diff_loss<0:
-                    diff_loss = m.sqrt(abs(diff_loss))
-                reward = (diff_loss * 10 / (1 + self.bad_actions * 10)) - self.bad_actions * 10
-                print(loss.item(), diff_loss, reward, end=', ')
+                if diff_loss < 0:
+                    diff_rwd = abs(diff_loss)
+                else:
+                    diff_rwd = -m.sqrt(abs(diff_loss))
+                reward = (diff_rwd * 10 / (1 + self.bad_actions * 10)) - self.bad_actions * 10
+                print(loss.item(), diff_loss, reward)
                 if csv_reward:
                     with open("reward_hist.csv", "a+") as reward_file:
                         reward_file.write(f"{reward},\n")
-                pac.memory.update(reward=reward, done=[0])
+                self.action_system.memory.update(reward=reward, done=[0])
                 self.loss = diff_loss
                 self.reward = reward
-            action = pac.get_action(encoding).squeeze()
+            action = self.action_system.get_action(encoding).squeeze()
             if action[0] > 1:
                 self.set_focal_point(
                     0.5 + (action[2:4].cpu().numpy() * action[8].cpu().numpy()),
@@ -109,7 +113,8 @@ class ScreenWatcher(object):
                 if action[11] > 1:
                     pyautogui.mouseDown(*pyautogui.position(), pyautogui.SECONDARY)
 
-            pac.update_ppo()
+            if self.action_system.ready_to_update:
+                self.action_system.update_ppo()
 
     def set_focal_point(self, center_x_y: np.ndarray, zoom):
         """Set where we'll focus in the next frame once we can move."""
@@ -143,7 +148,7 @@ class ScreenWatcher(object):
 
         return prev
 
-    def serialize_full(self):
+    def serialize(self):
         """
         Serialize this class so it can be saved as part of a larger system.
 
@@ -153,6 +158,7 @@ class ScreenWatcher(object):
             "yields": self.yields,
             "_move_data_len": self._move_data_len,
             "recognition_system": self.recognition_system.serialize(),
+            "action_system": self.action_system.serialize(),
             "movement_encoding_widths": self.movement_encoding_widths,
             "state": self.state,
             "crop_settings": self.crop_settings,
@@ -161,17 +167,19 @@ class ScreenWatcher(object):
         return ser
 
     @classmethod
-    def deserialize_full(cls, ser):
+    def deserialize(cls, ser):
         """
         Create an instance of this class from a serialized dictionary.
 
         This method loads all information so that the model can be further trained.
         """
-        eye = cls(RecognitionSystem.deserialize(ser['recognition_system']),
-                  ser['yields'],
-                  ser['movement_encoding_widths'],
-                  ser['crop_settings']
-                  )
+        eye = cls(
+            ContinualProximalActorCritic.deserialize(ser['action_system']),
+            RecognitionSystem.deserialize(ser['recognition_system']),
+            ser['yields'],
+            ser['movement_encoding_widths'],
+            ser['crop_settings']
+        )
         eye._move_data_len = ser['_move_data_len']
         eye.state = ser['state']
         eye.bad_actions = ser['bad_actions']
@@ -183,14 +191,14 @@ class ScreenWatcher(object):
 
         For deployment on other devices, only the model and some class variables are needed.
         """
-        state = self.serialize_full()
+        state = self.serialize()
         torch.save(state, filename)
 
     @classmethod
     def load(cls, filename="virtual_eye_local.torch"):
         """Load this class from a file for further training."""
         state = torch.load(filename)
-        return ScreenWatcher.deserialize_full(state)
+        return ScreenWatcher.deserialize(state)
 
     def train_recognizer(self, frame, prev_frame, movement):
         """Train our chosen recognition system."""
@@ -464,5 +472,9 @@ class ScreenWatcher(object):
 
 
 if __name__ == "__main__":
-    eye = ScreenWatcher()
+    try:
+        eye = ScreenWatcher.load()
+    except:
+        print("didn't load")
+        eye = ScreenWatcher()
     eye.run()
