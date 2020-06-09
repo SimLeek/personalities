@@ -22,7 +22,9 @@ def to_one_hot(y, depth=None):
     """
     y_flat = y.to(torch.int64).view(-1, 1)
     depth = depth if depth is not None else int(torch.max(y_flat)) + 1
-    y_one_hot = torch.zeros(y_flat.size()[0], depth, device=y.device).scatter_(1, y_flat, 1)
+    y_one_hot = torch.zeros(y_flat.size()[0], depth, device=y.device).scatter_(
+        1, y_flat, 1
+    )
     y_one_hot = y_one_hot.view(*(tuple(y.shape) + (-1,)))
     return y_one_hot
 
@@ -123,7 +125,7 @@ class Entmax15Function(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        Y, = ctx.saved_tensors
+        (Y,) = ctx.saved_tensors
         gppr = Y.sqrt()  # = 1 / g'' (Y)
         dX = grad_output * gppr
         q = dX.sum(ctx.dim) / gppr.sum(ctx.dim)
@@ -202,7 +204,9 @@ class ModuleWithInit(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self._is_initialized_tensor = nn.Parameter(torch.tensor(0, dtype=torch.uint8), requires_grad=False)
+        self._is_initialized_tensor = nn.Parameter(
+            torch.tensor(0, dtype=torch.uint8), requires_grad=False
+        )
         self._is_initialized_bool = None
         # Note: this module uses a separate flag self._is_initialized so as to achieve both
         # * persistence: is_initialized is saved alongside model in state_dict

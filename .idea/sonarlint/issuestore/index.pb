@@ -15,3 +15,5 @@ R
 "personalities/base/actor_critic.py,1\4\145234f31a27f12f8b019d3066ccce1fc31a9a1a
 M
 personalities/util/desk_io.py,9\a\9a718bf6c4ac5cdde6c67c5636af657dc749c7d4
+K
+personalities/base/convs.py,2\f\2f91a97b8a1e2797b7c954cd77d4fcd83560ca4f

@@ -19,10 +19,12 @@ class CamYield(object):
 
 
 class RecognitionSystem(object):
-    def __init__(self,
-                 model: nn.Module = None,
-                 loss_criteria: nn.modules.loss._Loss = None,
-                 optimizer: Optimizer = None):
+    def __init__(
+        self,
+        model: nn.Module = None,
+        loss_criteria: nn.modules.loss._Loss = None,
+        optimizer: Optimizer = None,
+    ):
         if model:
             self.model = model
         else:
@@ -52,13 +54,13 @@ class RecognitionSystem(object):
     @classmethod
     def deserialize(cls, cereal):
         sys = cls(
-            model=cereal['model'],
-            optimizer=cereal['optimizer'],
-            loss_criteria=cereal['loss']
+            model=cereal["model"],
+            optimizer=cereal["optimizer"],
+            loss_criteria=cereal["loss"],
         )
-        sys.model.load_state_dict(cereal['model_state'])
-        sys.optimizer.load_state_dict(cereal['optimizer_state'])
-        sys.loss_criteria.load_state_dict(cereal['loss_state'])
+        sys.model.load_state_dict(cereal["model_state"])
+        sys.optimizer.load_state_dict(cereal["optimizer_state"])
+        sys.loss_criteria.load_state_dict(cereal["loss_state"])
 
         return sys
 
@@ -121,12 +123,12 @@ class VirtualEyeWithLens(object):
         unclipped_barrel: Optional[float] = None
 
     def __init__(
-            self,
-            cam=(0,),
-            recognition_system=RecognitionSystem(),
-            yields: CamYield = CamYield(),
-            movement_encoding_widths: MovementEncodingWidth = MovementEncodingWidth(),
-            crop_settings: CropSettings = CropSettings(),
+        self,
+        cam=(0,),
+        recognition_system=RecognitionSystem(),
+        yields: CamYield = CamYield(),
+        movement_encoding_widths: MovementEncodingWidth = MovementEncodingWidth(),
+        crop_settings: CropSettings = CropSettings(),
     ):
         """Create a virtual eye. Can run on video files, webcams, numpy arrays, etc."""
 
@@ -157,11 +159,13 @@ class VirtualEyeWithLens(object):
         pac = None
         for encoding, loss in self:
             if pac is None:
-                pac = ContinualProximalActorCritic(encoding.numel(), 4, 64, memory_len=4)
+                pac = ContinualProximalActorCritic(
+                    encoding.numel(), 4, 64, memory_len=4
+                )
                 pac.cuda()
             else:
                 reward = (loss * 10 / (1 + self.bad_actions)) - self.bad_actions * 10
-                print(loss.item(), reward.item(), end=', ')
+                print(loss.item(), reward.item(), end=", ")
                 if csv_reward:
                     with open("reward_hist.csv", "a+") as reward_file:
                         reward_file.write(f"{reward},\n")
@@ -186,7 +190,9 @@ class VirtualEyeWithLens(object):
         self.state.barrel = min(max(barrel, self.BARREL_MIN), self.BARREL_MAX)
 
     def move_focal_point(self, center_x_y: np.ndarray, zoom, barrel):
-        center = self.state.center + center_x_y.copy().astype(self.state.unclipped_center.dtype)
+        center = self.state.center + center_x_y.copy().astype(
+            self.state.unclipped_center.dtype
+        )
         zoom = self.state.zoom + zoom
         barrel = self.state.barrel + barrel
         self.state.unclipped_center = center
@@ -240,15 +246,16 @@ class VirtualEyeWithLens(object):
 
         This method loads all information so that the model can be further trained.
         """
-        eye = cls(ser['cam'],
-                  RecognitionSystem.deserialize(ser['recognition_system']),
-                  ser['yields'],
-                  ser['movement_encoding_widths'],
-                  ser['crop_settings']
-                  )
-        eye._move_data_len = ser['_move_data_len']
-        eye.state = ser['state']
-        eye.bad_actions = ser['bad_actions']
+        eye = cls(
+            ser["cam"],
+            RecognitionSystem.deserialize(ser["recognition_system"]),
+            ser["yields"],
+            ser["movement_encoding_widths"],
+            ser["crop_settings"],
+        )
+        eye._move_data_len = ser["_move_data_len"]
+        eye.state = ser["state"]
+        eye.bad_actions = ser["bad_actions"]
         return eye
 
     def save(self, filename="virtual_eye_local.torch"):
@@ -273,9 +280,7 @@ class VirtualEyeWithLens(object):
         p_frame = cv_image_to_pytorch(prev_frame)
         m_frame = vector_to_2d_encoding(movement)
         guess_current_frame = self.recognition_system.model(p_frame, m_frame)
-        loss_val = self.recognition_system.loss_criteria(
-            guess_current_frame, t_frame
-        )
+        loss_val = self.recognition_system.loss_criteria(guess_current_frame, t_frame)
         try:
             loss_val.backward()
         except RuntimeError as re:
@@ -323,9 +328,7 @@ class VirtualEyeWithLens(object):
                 self._update_focal_point()
                 self._encode_focal_point_movement(prev)
 
-                self.recognition_system.model.set_movement_data_len(
-                    prev.movement.size
-                )
+                self.recognition_system.model.set_movement_data_len(prev.movement.size)
         self.save()
 
     def _init_cam(self, cam):
@@ -343,10 +346,10 @@ class VirtualEyeWithLens(object):
 
         self.cam = (
             display(*cam, size=self.crop_settings.CAM_SIZE_REQUEST)
-                .add_callback(self._pre_crop_callback)
-                .add_callback(self._lens_callback)
-                .add_callback(self._post_crop_callback)
-                .wait_for_init()
+            .add_callback(self._pre_crop_callback)
+            .add_callback(self._lens_callback)
+            .add_callback(self._post_crop_callback)
+            .wait_for_init()
         )
 
     def _update_focal_point(self):
@@ -396,20 +399,20 @@ class VirtualEyeWithLens(object):
     def _punish_overly_rapid_actions(self, diff: State):
         if diff.center[0] == 0:
             self.bad_actions += (
-                                        diff.center[0] - diff.unclipped_center[0]
-                                ) / self._pre_crop_callback.input_size[0]
+                diff.center[0] - diff.unclipped_center[0]
+            ) / self._pre_crop_callback.input_size[0]
         if diff.center[1] == 0:
             self.bad_actions += (
-                                        diff.center[1] - diff.unclipped_center[1]
-                                ) / self._pre_crop_callback.input_size[1]
+                diff.center[1] - diff.unclipped_center[1]
+            ) / self._pre_crop_callback.input_size[1]
         if diff.center[0] >= self._pre_crop_callback.input_size[0] * 2:
             self.bad_actions += (
-                                        diff.center[0] - self._pre_crop_callback.input_size[0] * 2
-                                ) / self._pre_crop_callback.input_size[0]
+                diff.center[0] - self._pre_crop_callback.input_size[0] * 2
+            ) / self._pre_crop_callback.input_size[0]
         if diff.center[1] >= self._pre_crop_callback.input_size[1] * 2:
             self.bad_actions += (
-                                        diff.center[1] - self._pre_crop_callback.input_size[0] * 2
-                                ) / self._pre_crop_callback.input_size[1]
+                diff.center[1] - self._pre_crop_callback.input_size[0] * 2
+            ) / self._pre_crop_callback.input_size[1]
 
         if diff.zoom == 0:
             self.bad_actions += diff.zoom - diff.unclipped_zoom
@@ -427,24 +430,22 @@ class VirtualEyeWithLens(object):
 
         center = [None, None]
         center[0] = (
-                self._pre_crop_callback.center[0]
-                + self._pre_crop_callback.input_size[0]
+            self._pre_crop_callback.center[0] + self._pre_crop_callback.input_size[0]
         )
         center[1] = (
-                self._pre_crop_callback.center[1]
-                + self._pre_crop_callback.input_size[1]
+            self._pre_crop_callback.center[1] + self._pre_crop_callback.input_size[1]
         )
 
         diff.unclipped_center = [None, None]
         diff.unclipped_center[0] = (
-                self._pre_crop_callback.center[0]
-                - prev.center[0]
-                + self._pre_crop_callback.input_size[0]
+            self._pre_crop_callback.center[0]
+            - prev.center[0]
+            + self._pre_crop_callback.input_size[0]
         )
         diff.unclipped_center[1] = (
-                self._pre_crop_callback.center[1]
-                - prev.center[1]
-                + self._pre_crop_callback.input_size[1]
+            self._pre_crop_callback.center[1]
+            - prev.center[1]
+            + self._pre_crop_callback.input_size[1]
         )
         diff.center = [None, None]
         diff.center[0] = max(0, diff.unclipped_center[0])

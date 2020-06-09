@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="069bb104-073d-4255-a688-52f58934d136" name="Default Changelist" comment="Added some comments. Added pain/reward to actor/critic feedback. Cleaned up actor/critic forward. Moved cam-eye and desk-io main code into run functions.">
-      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/9/0/90d4b2b6ee507434b4792df0ff43629f251fc3ab" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/9/0/90d4b2b6ee507434b4792df0ff43629f251fc3ab" afterDir="false" />
+    <list default="true" id="069bb104-073d-4255-a688-52f58934d136" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/personalities/base/convs.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/personalities/util/pyramid_head_64.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/personalities/util/trainable_cam_eye.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/personalities.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/personalities.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/1/4/145234f31a27f12f8b019d3066ccce1fc31a9a1a" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/1/4/145234f31a27f12f8b019d3066ccce1fc31a9a1a" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/9/a/9a718bf6c4ac5cdde6c67c5636af657dc749c7d4" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/9/a/9a718bf6c4ac5cdde6c67c5636af657dc749c7d4" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/personalities/base/actor_critic.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/actor_critic.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/base/arch.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/arch.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/base/nn_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/nn_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/base/odst.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/odst.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/base/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/util/cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/cam_eye.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/personalities/util/desk_io.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/desk_io.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_util/test_cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_util/test_cam_eye.py" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -24,20 +36,23 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="GFJFpZcP" />
+  </component>
   <component name="ProjectId" id="1TUheLjKz2hdgUscOmlURmfQrK2" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="PropertiesComponent">
     <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="SONARLINT_PRECOMMIT_ANALYSIS" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$/../booltool" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/personalities/util" />
     <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
   </component>
   <component name="RecentsManager">
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\Users\joshm\PycharmProjects\personalities\tests\test_util" />
-    </key>
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\joshm\PycharmProjects\personalities\personalities\util" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\joshm\PycharmProjects\personalities\tests\test_util" />
     </key>
   </component>
   <component name="RunDashboard">
@@ -66,6 +81,27 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/personalities/util/cam_eye.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="convs" type="PythonConfigurationType" factoryName="Python" temporary="true">
+      <module name="personalities" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/personalities/base" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/personalities/base/convs.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -125,30 +161,18 @@
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="pytest for test_cam_eye.test_recognition_system_serialization" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="personalities" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/test_util" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_cam_eye.test_recognition_system_serialization&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
     <recent_temporary>
       <list>
         <item itemvalue="Python.desk_io" />
+        <item itemvalue="Python.convs" />
         <item itemvalue="Python.cam_eye" />
         <item itemvalue="Python tests.pytest for test_cam_eye.test_cam_eye_save_and_load" />
         <item itemvalue="Python tests.pytest for test_cam_eye.test_cam_eye_serialization" />
-        <item itemvalue="Python tests.pytest for test_cam_eye.test_recognition_system_serialization" />
       </list>
     </recent_temporary>
+  </component>
+  <component name="ServiceViewManager">
+    <option name="showServicesTree" value="false" />
   </component>
   <component name="SvnConfiguration">
     <configuration />
@@ -161,6 +185,14 @@
       <option name="presentableId" value="Default" />
       <updated>1573520675105</updated>
     </task>
+    <task id="LOCAL-00001" summary="Added saving to PPO. Routed up through desk_io.">
+      <created>1583370193977</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1583370193977</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -176,6 +208,10 @@
       </map>
     </option>
   </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Added saving to PPO. Routed up through desk_io." />
+    <option name="LAST_COMMIT_MESSAGE" value="Added saving to PPO. Routed up through desk_io." />
+  </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
@@ -183,6 +219,11 @@
           <url>file://$USER_HOME$/AppData/Local/Programs/Python/Python37/Lib/site-packages/displayarray/effects/lens.py</url>
           <line>214</line>
           <option name="timeStamp" value="85" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/personalities/base/convs.py</url>
+          <line>28</line>
+          <option name="timeStamp" value="90" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
@@ -210,6 +251,7 @@
         <watch expression="self.log_std.exp()" language="Python" />
         <watch expression="self.val_feedback" language="Python" />
         <watch expression="val_fb.unsqueeze(0)" language="Python" />
+        <watch expression="x.shape" language="Python" />
       </configuration>
     </watches-manager>
   </component>

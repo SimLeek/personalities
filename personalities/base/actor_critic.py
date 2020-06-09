@@ -30,12 +30,14 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         self.critic = nn.Sequential(
-            ODST(in_features=num_inputs + num_outputs + 1,
-                 num_trees=max_complexity,
-                 tree_dim=1,
-                 flatten_output=False,
-                 depth=6),
-            Lambda(lambda x: x.mean(1))
+            ODST(
+                in_features=num_inputs + num_outputs + 1,
+                num_trees=max_complexity,
+                tree_dim=1,
+                flatten_output=False,
+                depth=6,
+            ),
+            Lambda(lambda x: x.mean(1)),
         )
 
         self.num_outputs = num_outputs
@@ -43,12 +45,14 @@ class ActorCritic(nn.Module):
         self.val_feedback = torch.zeros((1, 1))
 
         self.actor = nn.Sequential(
-            ODST(in_features=num_inputs + num_outputs + 1,
-                 num_trees=max_complexity,
-                 tree_dim=num_outputs,
-                 flatten_output=False,
-                 depth=6),
-            Lambda(lambda x: x.mean(1))
+            ODST(
+                in_features=num_inputs + num_outputs + 1,
+                num_trees=max_complexity,
+                tree_dim=num_outputs,
+                flatten_output=False,
+                depth=6,
+            ),
+            Lambda(lambda x: x.mean(1)),
         )
 
         self.log_std = nn.Parameter(torch.ones(1, num_outputs) * std)
@@ -71,9 +75,7 @@ class ActorCritic(nn.Module):
                 val_fb = self.val_feedback.type_as(x).squeeze()
                 if val_fb.ndim == 0:
                     val_fb = val_fb.unsqueeze(0)
-                x = torch.cat(
-                    (x, torch.stack([val_fb] * x.shape[0], dim=0)), dim=1
-                )
+                x = torch.cat((x, torch.stack([val_fb] * x.shape[0], dim=0)), dim=1)
         else:
             if self.val_feedback.ndim > 1:
                 self.val_feedback = self.val_feedback[-1, ...]
@@ -147,7 +149,7 @@ def standardize(x: torch.Tensor, machine_epsilon=1e-8):
 class _QueueActorCriticMemory(object):
     """Holds memory for an actor critic learner."""
 
-    def __init__(self, max_size=float('inf')):
+    def __init__(self, max_size=float("inf")):
         """
         Holds memory for an actor critic module.
 
@@ -178,38 +180,38 @@ class _QueueActorCriticMemory(object):
 
     def serialize(self):
         ser = {
-            'last_action': self.last_action,
-            'last_dist': self.last_dist,
-            'last_value': self.last_value,
-            'last_state': self.last_state,
-            'log_probs': self.log_probs,
-            'values': self.values,
-            'rewards': self.rewards,
-            'done_masks': self.done_masks,
-            'states': self.states,
-            'actions': self.actions,
-            'gaes': self.gaes,
-            'advantages': self.advantages,
-            'max_size': self.max_size
+            "last_action": self.last_action,
+            "last_dist": self.last_dist,
+            "last_value": self.last_value,
+            "last_state": self.last_state,
+            "log_probs": self.log_probs,
+            "values": self.values,
+            "rewards": self.rewards,
+            "done_masks": self.done_masks,
+            "states": self.states,
+            "actions": self.actions,
+            "gaes": self.gaes,
+            "advantages": self.advantages,
+            "max_size": self.max_size,
         }
         return ser
 
     @classmethod
     def deserialize(cls, cereal):
-        de = cls(cereal['max_size'])
+        de = cls(cereal["max_size"])
 
-        de.last_action = cereal['last_action']
-        de.last_dist = cereal['last_dist']
-        de.last_value = cereal['last_value']
-        de.last_state = cereal['last_state']
-        de.log_probs = cereal['log_probs']
-        de.values = cereal['values']
-        de.rewards = cereal['rewards']
-        de.done_masks = cereal['done_masks']
-        de.states = cereal['states']
-        de.actions = cereal['actions']
-        de.gaes = cereal['gaes']
-        de.advantages = cereal['advantages']
+        de.last_action = cereal["last_action"]
+        de.last_dist = cereal["last_dist"]
+        de.last_value = cereal["last_value"]
+        de.last_state = cereal["last_state"]
+        de.log_probs = cereal["log_probs"]
+        de.values = cereal["values"]
+        de.rewards = cereal["rewards"]
+        de.done_masks = cereal["done_masks"]
+        de.states = cereal["states"]
+        de.actions = cereal["actions"]
+        de.gaes = cereal["gaes"]
+        de.advantages = cereal["advantages"]
 
         return de
 
@@ -256,31 +258,55 @@ class _QueueActorCriticMemory(object):
         if len(self) < self.max_size:
             self.log_probs = torch.cat([self.log_probs, log_prob])
             self.values = torch.cat([self.values, self.last_value.to(self.device)])
-            self.rewards = torch.cat([self.rewards,
-                                      torch.tensor([reward])
-                                     .detach()
-                                     .to(torch.float32)
-                                     .unsqueeze(0)
-                                     .unsqueeze(1)
-                                     .to(self.device)])
-            self.done_masks = torch.cat([self.done_masks,
-                                         (1 - torch.tensor(done)).to(torch.float32).unsqueeze(1).to(self.device)])
+            self.rewards = torch.cat(
+                [
+                    self.rewards,
+                    torch.tensor([reward])
+                    .detach()
+                    .to(torch.float32)
+                    .unsqueeze(0)
+                    .unsqueeze(1)
+                    .to(self.device),
+                ]
+            )
+            self.done_masks = torch.cat(
+                [
+                    self.done_masks,
+                    (1 - torch.tensor(done))
+                    .to(torch.float32)
+                    .unsqueeze(1)
+                    .to(self.device),
+                ]
+            )
             self.states = torch.cat([self.states, self.last_state.to(self.device)])
             self.actions = torch.cat([self.actions, self.last_action.to(self.device)])
         else:
             self.log_probs = torch.cat([self.log_probs[1:], log_prob])
             self.values = torch.cat([self.values[1:], self.last_value.to(self.device)])
-            self.rewards = torch.cat([self.rewards[1:],
-                                      torch.tensor([reward])
-                                     .detach()
-                                     .to(torch.float32)
-                                     .unsqueeze(0)
-                                     .unsqueeze(1)
-                                     .to(self.device)])
-            self.done_masks = torch.cat([self.done_masks[1:],
-                                         (1 - torch.tensor(done)).to(torch.float32).unsqueeze(1).to(self.device)])
+            self.rewards = torch.cat(
+                [
+                    self.rewards[1:],
+                    torch.tensor([reward])
+                    .detach()
+                    .to(torch.float32)
+                    .unsqueeze(0)
+                    .unsqueeze(1)
+                    .to(self.device),
+                ]
+            )
+            self.done_masks = torch.cat(
+                [
+                    self.done_masks[1:],
+                    (1 - torch.tensor(done))
+                    .to(torch.float32)
+                    .unsqueeze(1)
+                    .to(self.device),
+                ]
+            )
             self.states = torch.cat([self.states[1:], self.last_state.to(self.device)])
-            self.actions = torch.cat([self.actions[1:], self.last_action.to(self.device)])
+            self.actions = torch.cat(
+                [self.actions[1:], self.last_action.to(self.device)]
+            )
         return self
 
     def batch_iter(self, mini_batch_size=64):
@@ -288,9 +314,7 @@ class _QueueActorCriticMemory(object):
         batch_size = self.states.size(0)
 
         self.advantages = self.gaes.squeeze() - self.values.squeeze()
-        self.advantages = (
-            standardize(self.advantages).to(torch.float32).to(self.device)
-        )
+        self.advantages = standardize(self.advantages).to(torch.float32).to(self.device)
 
         for _ in range(int(m.ceil(batch_size / mini_batch_size))):
             random_selection = np.random.randint(0, batch_size - 1, mini_batch_size)
@@ -305,6 +329,7 @@ class _QueueActorCriticMemory(object):
 
 class _ArrayActorCriticMemoryBatch(object):
     """A single batch of actor critic memory."""
+
     state: torch.Tensor
     action: torch.Tensor
     old_log_prob: torch.Tensor
@@ -347,27 +372,27 @@ class ProximalActorCritic(object):
 
     def serialize(self):
         state = {
-            'num_inputs': self._num_inputs,
-            'num_outputs': self._num_outputs,
-            'max_complexity': self._max_complexity,
-            'std': self._std,
-            'actor_critic_state': self.actor_critic.state_dict(),
-            'optimizer_state': self.optimizer.state_dict(),
-            'memory': self.memory.serialize()
+            "num_inputs": self._num_inputs,
+            "num_outputs": self._num_outputs,
+            "max_complexity": self._max_complexity,
+            "std": self._std,
+            "actor_critic_state": self.actor_critic.state_dict(),
+            "optimizer_state": self.optimizer.state_dict(),
+            "memory": self.memory.serialize(),
         }
         return state
 
     @classmethod
     def deserialize(cls, cereal):
         de = cls(
-            num_inputs=cereal['num_inputs'],
-            num_outputs=cereal['num_outputs'],
-            max_complexity=cereal['max_complexity'],
-            std=cereal['std']
+            num_inputs=cereal["num_inputs"],
+            num_outputs=cereal["num_outputs"],
+            max_complexity=cereal["max_complexity"],
+            std=cereal["std"],
         )
-        de.actor_critic.load_state_dict(cereal['actor_critic_state'])
-        de.optimizer.load_state_dict(cereal['optimizer_state'])
-        de.memory = de.memory.deserialize(cereal['memory'])
+        de.actor_critic.load_state_dict(cereal["actor_critic_state"])
+        de.optimizer.load_state_dict(cereal["optimizer_state"])
+        de.memory = de.memory.deserialize(cereal["memory"])
 
         return de
 
@@ -409,31 +434,38 @@ class ProximalActorCritic(object):
             gae = self.memory.gaes[-1].item()
         else:
             gae = 0
-        for step in reversed(range(self.memory.gaes.numel() - 1, self.memory.rewards.numel())):
+        for step in reversed(
+            range(self.memory.gaes.numel() - 1, self.memory.rewards.numel())
+        ):
             delta = (
-                    self.memory.rewards[step].to(self.device)
-                    + anticipation
-                    * self.memory.values[min(step + 1, len(self.memory.rewards) - 1)].to(
-                self.device
-            )
-                    * self.memory.done_masks[step].to(self.device)
-                    - self.memory.values[step].to(self.device)
+                self.memory.rewards[step].to(self.device)
+                + anticipation
+                * self.memory.values[min(step + 1, len(self.memory.rewards) - 1)].to(
+                    self.device
+                )
+                * self.memory.done_masks[step].to(self.device)
+                - self.memory.values[step].to(self.device)
             )
             gae = (
-                    delta
-                    + anticipation
-                    * smoothing
-                    * self.memory.done_masks[step].to(self.device)
-                    * gae
+                delta
+                + anticipation
+                * smoothing
+                * self.memory.done_masks[step].to(self.device)
+                * gae
             )
             # prepend to get correct order back
-            self.memory.gaes = torch.cat([self.memory.gaes.to(self.memory.device),
-                                          gae.to(self.memory.device) + self.memory.values[step].to(self.memory.device)])
+            self.memory.gaes = torch.cat(
+                [
+                    self.memory.gaes.to(self.memory.device),
+                    gae.to(self.memory.device)
+                    + self.memory.values[step].to(self.memory.device),
+                ]
+            )
             if self.memory.gaes.numel() > self.memory.rewards.numel():
                 self.memory.gaes = self.memory.gaes[1:]
 
     def update_ppo(
-            self, epochs=10, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
+        self, epochs=10, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
     ):
         self.compute_gae()
 
@@ -456,7 +488,7 @@ class ProximalActorCritic(object):
                 critic_loss = (mem.gae.to(self.device) - value).pow(2).mean()
 
                 loss = (
-                        critic_discount * critic_loss + actor_loss - entropy_beta * entropy
+                    critic_discount * critic_loss + actor_loss - entropy_beta * entropy
                 )
                 loss.detach_()
                 loss.requires_grad = True
@@ -480,7 +512,7 @@ class ContinualProximalActorCritic(ProximalActorCritic):
         self.memory.max_size = memory_len
 
     def update_ppo(
-            self, epochs=1, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
+        self, epochs=1, ppo_clip=0.2, critic_discount=0.5, entropy_beta=0.001
     ):
         if len(self.memory) >= self.memory_len:
             self.compute_gae()
@@ -504,7 +536,9 @@ class ContinualProximalActorCritic(ProximalActorCritic):
                     critic_loss = (mem.gae.to(self.device) - value).pow(2).mean()
 
                     loss = (
-                            critic_discount * critic_loss + actor_loss - entropy_beta * entropy
+                        critic_discount * critic_loss
+                        + actor_loss
+                        - entropy_beta * entropy
                     )
                     print(loss.item())
                     loss.detach_()

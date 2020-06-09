@@ -5,12 +5,26 @@ from .odst import ODST
 
 
 class DenseBlock(nn.Sequential):
-    def __init__(self, input_dim, layer_dim, num_layers, tree_dim=1, max_features=None,
-                 input_dropout=0.0, flatten_output=True, Module=ODST, **kwargs):
+    def __init__(
+        self,
+        input_dim,
+        layer_dim,
+        num_layers,
+        tree_dim=1,
+        max_features=None,
+        input_dropout=0.0,
+        flatten_output=True,
+        Module=ODST,
+        **kwargs
+    ):
         layers = []
         for i in range(num_layers):
-            oddt = Module(input_dim, layer_dim, tree_dim=tree_dim, flatten_output=True, **kwargs)
-            input_dim = min(input_dim + layer_dim * tree_dim, max_features or float('inf'))
+            oddt = Module(
+                input_dim, layer_dim, tree_dim=tree_dim, flatten_output=True, **kwargs
+            )
+            input_dim = min(
+                input_dim + layer_dim * tree_dim, max_features or float("inf")
+            )
             layers.append(oddt)
 
         super().__init__(*layers)
@@ -25,9 +39,17 @@ class DenseBlock(nn.Sequential):
         for layer in self:
             layer_inp = x
             if self.max_features is not None:
-                tail_features = min(self.max_features, layer_inp.shape[-1]) - initial_features
+                tail_features = (
+                    min(self.max_features, layer_inp.shape[-1]) - initial_features
+                )
                 if tail_features != 0:
-                    layer_inp = torch.cat([layer_inp[..., :initial_features], layer_inp[..., -tail_features:]], dim=-1)
+                    layer_inp = torch.cat(
+                        [
+                            layer_inp[..., :initial_features],
+                            layer_inp[..., -tail_features:],
+                        ],
+                        dim=-1,
+                    )
             if self.training and self.input_dropout:
                 layer_inp = F.dropout(layer_inp, self.input_dropout)
             h = layer(layer_inp)
@@ -35,5 +57,7 @@ class DenseBlock(nn.Sequential):
 
         outputs = x[..., initial_features:]
         if not self.flatten_output:
-            outputs = outputs.view(*outputs.shape[:-1], self.num_layers * self.layer_dim, self.tree_dim)
+            outputs = outputs.view(
+                *outputs.shape[:-1], self.num_layers * self.layer_dim, self.tree_dim
+            )
         return outputs

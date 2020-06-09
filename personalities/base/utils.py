@@ -18,7 +18,7 @@ def download(url, filename, delete_if_interrupted=True, chunk_size=4096):
         with open(filename, "wb") as f:
             print("Downloading {} > {}".format(url, filename))
             response = requests.get(url, stream=True)
-            total_length = response.headers.get('content-length')
+            total_length = response.headers.get("content-length")
 
             if total_length is None:  # no content length header
                 f.write(response.content)
@@ -37,16 +37,25 @@ def download(url, filename, delete_if_interrupted=True, chunk_size=4096):
     return filename
 
 
-def iterate_minibatches(*tensors, batch_size, shuffle=True, epochs=1,
-                        allow_incomplete=True, callback=lambda x: x):
+def iterate_minibatches(
+    *tensors,
+    batch_size,
+    shuffle=True,
+    epochs=1,
+    allow_incomplete=True,
+    callback=lambda x: x
+):
     indices = np.arange(len(tensors[0]))
-    upper_bound = int((np.ceil if allow_incomplete else np.floor)(len(indices) / batch_size)) * batch_size
+    upper_bound = (
+        int((np.ceil if allow_incomplete else np.floor)(len(indices) / batch_size))
+        * batch_size
+    )
     epoch = 0
     while True:
         if shuffle:
             np.random.shuffle(indices)
         for batch_start in callback(range(0, upper_bound, batch_size)):
-            batch_ix = indices[batch_start: batch_start + batch_size]
+            batch_ix = indices[batch_start : batch_start + batch_size]
             batch = [tensor[batch_ix] for tensor in tensors]
             yield batch if len(tensors) > 1 else batch[0]
         epoch += 1
@@ -64,13 +73,18 @@ def process_in_chunks(function, *args, batch_size, out=None, **kwargs):
     :returns: function(data), computed in a memory-efficient way
     """
     total_size = args[0].shape[0]
-    first_output = function(*[x[0: batch_size] for x in args])
+    first_output = function(*[x[0:batch_size] for x in args])
     output_shape = (total_size,) + tuple(first_output.shape[1:])
     if out is None:
-        out = torch.zeros(*output_shape, dtype=first_output.dtype, device=first_output.device,
-                          layout=first_output.layout, **kwargs)
+        out = torch.zeros(
+            *output_shape,
+            dtype=first_output.dtype,
+            device=first_output.device,
+            layout=first_output.layout,
+            **kwargs
+        )
 
-    out[0: batch_size] = first_output
+    out[0:batch_size] = first_output
     for i in range(batch_size, total_size, batch_size):
         batch_ix = slice(i, min(i + batch_size, total_size))
         out[batch_ix] = function(*[x[batch_ix] for x in args])

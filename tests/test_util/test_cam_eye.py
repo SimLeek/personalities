@@ -36,8 +36,10 @@ def test_recognition_system_serialization():
 
 def test_cam_eye_init():
     with mock.patch(
-            "personalities.util.cam_eye.display"
-    ) as mock_cam, mock.patch.object(VirtualEyeWithLens, "_init_cam") as mock_mouse_loop:
+        "personalities.util.cam_eye.display"
+    ) as mock_cam, mock.patch.object(
+        VirtualEyeWithLens, "_init_cam"
+    ) as mock_mouse_loop:
         ceye = VirtualEyeWithLens()
 
         assert ceye.yields.LOSS
@@ -63,6 +65,7 @@ def test_cam_eye_init():
 
 def test_cam_eye_serialization():
     with mock.patch.object(VirtualEyeWithLens, "_init_cam", autospec=True) as mock_cam:
+
         def new_cam(self, cam):
             cam_mock = mock.MagicMock()
             if not isinstance(cam, list):
@@ -103,6 +106,7 @@ def test_cam_eye_serialization():
 # @pytest.mark.skip("Not saving to the file system.")
 def test_cam_eye_save_and_load():
     with mock.patch.object(VirtualEyeWithLens, "_init_cam", autospec=True) as mock_cam:
+
         def new_cam(self, cam):
             cam_mock = mock.MagicMock()
             if not isinstance(cam, list):
