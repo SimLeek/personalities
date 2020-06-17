@@ -1,24 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="069bb104-073d-4255-a688-52f58934d136" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/personalities/base/convs.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/personalities/util/pyramid_head_64.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/personalities/util/trainable_cam_eye.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/personalities.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/personalities.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/1/4/145234f31a27f12f8b019d3066ccce1fc31a9a1a" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/1/4/145234f31a27f12f8b019d3066ccce1fc31a9a1a" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/9/a/9a718bf6c4ac5cdde6c67c5636af657dc749c7d4" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/9/a/9a718bf6c4ac5cdde6c67c5636af657dc749c7d4" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sonarlint/issuestore/index.pb" afterDir="false" />
+    <list default="true" id="069bb104-073d-4255-a688-52f58934d136" name="Default Changelist" comment="Added saving to PPO. Routed up through desk_io.">
+      <change afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/base/actor_critic.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/actor_critic.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/base/arch.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/arch.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/base/nn_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/nn_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/base/odst.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/odst.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/base/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/base/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/util/cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/cam_eye.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/personalities/util/desk_io.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/desk_io.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/test_util/test_cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_util/test_cam_eye.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/util/pyramid_head_64.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/pyramid_head_64.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/personalities/util/trainable_cam_eye.py" beforeDir="false" afterPath="$PROJECT_DIR$/personalities/util/trainable_cam_eye.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />

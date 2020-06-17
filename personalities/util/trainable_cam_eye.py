@@ -1,34 +1,46 @@
-from displayarray.effects import crop, lens
-from displayarray import display
-from coordencode import ints_to_2d, int_to_1d
-import math as m
-import numpy as np
-import torch.optim as optim
-import torch
-from torch.optim.optimizer import Optimizer
-from personalities.util.cv_helpers import cv_image_to_pytorch, vector_to_2d_encoding
-from personalities.util.pyramid_head_64 import PyramidHead64
-from collections.abc import Iterable
 from typing import Optional, List
+
+import numpy as np
+import torch
 import torch.nn as nn
+import torch.optim as optim
+from displayarray.effects import crop, lens
+from pnums import PInt
+from torch.optim.optimizer import Optimizer
 
-
-class CamYield(object):
-    LOSS = True  # yield the loss from the recognition system
-    ENCODING = True  # yield the learned encoding from the recognition system
-
+from personalities.base.actor_critic import ContinualProximalActorCritic
+from personalities.base.nn_utils import Lambda
+from personalities.base.odst import ODST
+from personalities.util.pyramid_head_64 import PyramidHead64
 
 class SingleEyeNet(object):
     def __init__(
-        self,
-        frame_head: nn.Module = None,
-        loss_criteria: nn.modules.loss._Loss = None,
-        optimizer: Optimizer = None,
+            self,
+            output_encoding_length,
+            extra_input_encoding_length=0,
+            frame_head: nn.Module = None,
+            fcn: nn.Module = None,
+            loss_criteria: nn.modules.loss._Loss = None,
+            optimizer: Optimizer = None,
     ):
         if frame_head:
             self.frame_head = frame_head
         else:
             self.frame_head = PyramidHead64()
+
+        if fcn:
+            self.fcn = fcn
+        else:
+            self.fcn = nn.Sequential(
+                ODST(
+                    in_features=frame_head.output_vector_len + extra_input_encoding_length,
+                    num_trees=64,
+                    tree_dim=output_encoding_length,
+                    flatten_output=False,
+                    depth=6,
+                ),
+                Lambda(lambda x: x.mean(1)),
+            )
 
         if loss_criteria:
             self.loss_criteria = loss_criteria
@@ -38,12 +50,12 @@ class SingleEyeNet(object):
         if optimizer:
             self.optimizer = optimizer
         else:
-            self.optimizer = optim.Adam(self.model.parameters())
+            params = list(self.frame_head.parameters()) + list(self.fcn.parameters())
+            self.optimizer = optim.Adam(params)
 
     def serialize(self):
         state = {
-            "model": self.model,
-            "model_state": self.model.state_dict(),
+            "frame_head": self.frame_head,
             "optimizer": self.optimizer,
             "optimizer_state": self.optimizer.state_dict(),
             "loss": self.loss_criteria,
@@ -54,159 +66,134 @@ class SingleEyeNet(object):
     @classmethod
     def deserialize(cls, cereal):
         sys = cls(
-            model=cereal["model"],
+            frame_head=cereal["frame_head"],
             optimizer=cereal["optimizer"],
             loss_criteria=cereal["loss"],
         )
-        sys.model.load_state_dict(cereal["model_state"])
         sys.optimizer.load_state_dict(cereal["optimizer_state"])
         sys.loss_criteria.load_state_dict(cereal["loss_state"])
 
         return sys
 
 
-class MovementEncodingWidth(object):
-    CENTER_X = 4
-    CENTER_Y = 4
-    CENTER_DX = 4
-    CENTER_DY = 4
-    ZOOM = 4
-    DZOOM = 4
+class EyePositionEncoding(object):
+    def __init__(self, center_bits=12, zoom_bits=6):
+        self.center = PInt(0, 0, bits=center_bits)
+        self.d_center = PInt(0, 0, bits=center_bits)
+        self.zoom = PInt(0, bits=zoom_bits)
+        self.d_zoom = PInt(0, bits=zoom_bits)
+
+    @property
+    def numel(self):
+        accum = self.center.bits * 4
+        accum += self.d_center.bits * 4
+        accum += self.zoom.bits * 2
+        accum += self.d_zoom.bits * 2
+        return accum
 
 
 class CropSettings(object):
     CAM_SIZE_REQUEST = (99999, 99999)
-    PRE_LENS = (480, 640, 3)
-    POST_LENS = (256, 256, 3)
+    POST_LENS = (64, 64, 3)
 
 
-class VirtualEyeWithLens(object):
-    """
-    Allows an AI to move around the input video space, cutting out and focusing on regions.
+class VideoLearner(object):
+    """An AI that moves around the input video space, cutting out and focusing on regions, to get the correct output."""
 
-    Note that it does not take into account muscle fatigue or focus speed. Because this is virtual, muscle fatigue is
-     nonexistent and focus speed is instantaneous. Since that's the case, looking everywhere around the image is
-     actually the best strategy.
-    """
-
-    __slots__ = [
-        "cam",
-        "_pre_crop_callback",
-        "_lens_callback",
-        "_post_crop_callback",
-        "yields",
-        "_move_data_len",
-        "recognition_system",
-        "movement_encoding_widths",
-        "state",
-        "crop_settings",
-        "bad_actions",
-    ]
-
-    ZOOM_MIN = 0.5
-    ZOOM_MAX = 2.0
+    ZOOM_MIN = 1.0 / 20
+    ZOOM_MAX = 1.0
     CENTER_MIN = 0.001
     CENTER_MAX = 1
 
-    class State(object):
-        center: Optional[List[float]] = None
-        zoom: Optional[float] = None
-        movement: Optional[np.ndarray] = None
-        frame: Optional[np.ndarray] = None
-        unclipped_center: Optional[List[float]] = None
-        unclipped_zoom: Optional[float] = None
-
     def __init__(
-        self,
-        cam=(0,),
-        recognition_system=SingleEyeNet(),
-        yields: CamYield = CamYield(),
-        movement_encoding_widths: MovementEncodingWidth = MovementEncodingWidth(),
-        crop_settings: CropSettings = CropSettings(),
+            self,
+            output_encoding: List[PInt],
+            recognition_system=None,
+            movement_encoding: EyePositionEncoding = EyePositionEncoding(),
+            crop_settings: CropSettings = CropSettings(),
     ):
         """Create a virtual eye. Can run on video files, webcams, numpy arrays, etc."""
 
-        self.yields = yields
-        self.recognition_system = recognition_system
-        self.movement_encoding_widths = movement_encoding_widths
+        self.movement_encoding = movement_encoding
         self.crop_settings = crop_settings
+        self.output_encoding = output_encoding
+        self.output_endocing_numel = sum([o.bits * o.ndim * 2 for o in self.output_encoding])
+        self.recognition_system = recognition_system
+        if self.recognition_system is None:
+            self.recognition_system = SingleEyeNet(self.output_endocing_numel,
+                                                   extra_input_encoding_length=movement_encoding.numel)
 
-        self.bad_actions = 0
+        self.pac_input = \
+            self.movement_encoding.numel + self.recognition_system.frame_head.output_vector_len
+        self.pac_output = self.movement_encoding.numel
 
-        # todo: I just realized this easily supports multiple cams. To take advantage of that, I should add which
-        #  cam we're using to a neural encoding, as well as which cam we were just on. Otherwise, the AI has no way of
-        #  knowing. Allowing things like rapid switching could be useful too, and could, for example, enable detection
-        #  of shiny materials that are brighter in one eye than another. Or slight 3D shape. Right now its random
-        #  switching.
-        self._init_cam(cam)
-
-        self.state = VirtualEyeWithLens.State()
+        self.pac = ContinualProximalActorCritic(
+            self.pac_input, self.pac_output, 64, memory_len=4
+        )
 
         self._move_data_len = 0
 
-        if torch.cuda.is_available():
-            self.recognition_system.model.cuda()
+        self.prev_loss = None
 
-    def run(self, csv_reward=False):
-        from personalities.base.actor_critic import ContinualProximalActorCritic
-
-        pac = None
-        for encoding, loss in self:
-            if pac is None:
-                pac = ContinualProximalActorCritic(
-                    encoding.numel(), 4, 64, memory_len=4
-                )
-                pac.cuda()
-            else:
-                reward = (loss * 10 / (1 + self.bad_actions)) - self.bad_actions * 10
-                print(loss.item(), reward.item(), end=", ")
-                if csv_reward:
-                    with open("reward_hist.csv", "a+") as reward_file:
-                        reward_file.write(f"{reward},\n")
-                pac.memory.update(reward=reward, done=[0])
-                # self.loss = loss.detach().item()
-                # self.reward = reward.detach().item()
-            action = pac.get_action(encoding).squeeze()
-            self.move_focal_point(
-                action[:2].cpu().numpy() / 10,
-                action[2].cpu().item() / 10,
-                action[3].cpu().item() / 10,
-            )
-            pac.update_ppo()
-
-    def set_focal_point(self, center_x_y: np.ndarray, zoom):
-        """Set where we'll focus in the next frame once we can move."""
-        self.state.unclipped_center = center_x_y.copy()
-        self.state.unclipped_zoom = zoom
-        self.state.center = center_x_y.clip(self.CENTER_MIN, self.CENTER_MAX)
-        self.state.zoom = min(max(zoom, self.ZOOM_MIN), self.ZOOM_MAX)
-
-    def move_focal_point(self, center_x_y: np.ndarray, zoom):
-        center = self.state.center + center_x_y.copy().astype(
-            self.state.unclipped_center.dtype
+        self._lens_callback = lens.BarrelPyTorch()
+        self._crop_callback = crop.Crop(
+            output_size=self.crop_settings.POST_LENS
         )
-        zoom = self.state.zoom + zoom
-        self.state.unclipped_center = center
-        self.state.unclipped_zoom = zoom
-        self.state.center = center.clip(self.CENTER_MIN, self.CENTER_MAX)
-        self.state.zoom = min(max(zoom, self.ZOOM_MIN), self.ZOOM_MAX)
+        self.recognition_system.optimizer.zero_grad()
+        self.is_training = False
 
-    def _update_prev(self, frame: np.ndarray, prev: State):
-        """Update our memory."""
-        prev.center = self._pre_crop_callback.center.copy()
-        prev.zoom = self._lens_callback.zoom
+        if torch.cuda.is_available():
+            self.pac.cuda()
+            self.recognition_system.frame_head.cuda()
+            self.recognition_system.fcn.cuda()
 
-        if prev.movement is None:
-            prev_prev = VirtualEyeWithLens.State()
-            prev_prev.center = (0, 0)
-            prev_prev.zoom = 0
-            self.set_focal_point(np.asarray([0, 0]), 0)
-            prev.movement = self._encode_focal_point_movement(prev_prev)
+    def forward(self, frame):
+        if self.is_training:
+            self.recognition_system.optimizer.zero_grad()
+        frame = self._lens_callback(frame)
+        frame = self._crop_callback(frame)
+        frame_encoding = self.recognition_system.frame_head.forward(frame)
+        final_encoding = self.recognition_system.fcn.forward(frame_encoding + self.last_action)
+        self.last_encoding = final_encoding
+        action = self.pac.get_action(final_encoding).squeeze()
+        self.last_action = action
+        self._set_focal_point(action)
+        return final_encoding
 
-        if prev.frame is None or prev.frame.shape != frame.shape:
-            prev.frame = np.zeros_like(frame)
+    def train(self, target):
+        self.is_training = True
+        loss = self.recognition_system.loss_criteria(self.last_encoding, target)
+        try:
+            loss.backward()
+        except RuntimeError as re:
+            self.save()
+            print("Runtime Error. Model was saved.")
+            # traceback.print_exc()
+            raise re
+        if self.prev_loss is not None:
+            diff_loss = loss - self.prev_loss
+            if loss == 0:
+                reward = 100_000
+            else:
+                reward = diff_loss / loss - self.bad_actions * 10
+                reward = min(reward, 100_000)
+            self.pac.memory.update(reward=reward, done=[0])
+            self.pac.update_ppo()
+        self.prev_loss = loss.item()
+        self.recognition_system.optimizer.step()
 
-        return prev
+    def _set_focal_point(self, focal_encoding: torch.Tensor):
+        """Set where we'll focus in the next frame once we can move."""
+        self._lens_callback.center = [
+            self.state.center[0] * self._lens_callback.input_size[0],
+            self.state.center[1] * self._lens_callback.input_size[0],
+        ]
+        self._crop_callback.center = [
+            self.state.zoom * self._post_crop_callback.input_size[0] / 2,
+            self.state.zoom * self._post_crop_callback.input_size[1] / 2,
+        ]
+
+        self._lens_callback.zoom = self.state.zoom
 
     def serialize_full(self):
         """
@@ -215,14 +202,10 @@ class VirtualEyeWithLens(object):
         This method save all information so that the model can be further trained.
         """
         ser = {
-            "cam": self.cam.source_names,
-            "yields": self.yields,
             "_move_data_len": self._move_data_len,
             "recognition_system": self.recognition_system.serialize(),
             "movement_encoding_widths": self.movement_encoding_widths,
-            "state": self.state,
             "crop_settings": self.crop_settings,
-            "bad_actions": self.bad_actions,
         }
         return ser
 
@@ -236,13 +219,10 @@ class VirtualEyeWithLens(object):
         eye = cls(
             ser["cam"],
             SingleEyeNet.deserialize(ser["recognition_system"]),
-            ser["yields"],
             ser["movement_encoding_widths"],
             ser["crop_settings"],
         )
         eye._move_data_len = ser["_move_data_len"]
-        eye.state = ser["state"]
-        eye.bad_actions = ser["bad_actions"]
         return eye
 
     def save(self, filename="virtual_eye_local.torch"):
@@ -258,239 +238,9 @@ class VirtualEyeWithLens(object):
     def load(cls, filename="virtual_eye_local.torch"):
         """Load this class from a file for further training."""
         state = torch.load(filename)
-        return VirtualEyeWithLens.deserialize_full(state)
-
-    def train_recognizer(self, frame, prev_frame, movement):
-        """Train our chosen recognition system."""
-        self.recognition_system.optimizer.zero_grad()
-        t_frame = cv_image_to_pytorch(frame)
-        p_frame = cv_image_to_pytorch(prev_frame)
-        m_frame = vector_to_2d_encoding(movement)
-        guess_current_frame = self.recognition_system.model(p_frame, m_frame)
-        loss_val = self.recognition_system.loss_criteria(guess_current_frame, t_frame)
-        try:
-            loss_val.backward()
-        except RuntimeError as re:
-            self.save()
-            print("Runtime Error. Model was saved.")
-            # traceback.print_exc()
-            raise re
-
-        self.recognition_system.optimizer.step()
-
-        return loss_val
-
-    def _handle_iter_yields(self, loss):
-        """Setup whatever we decided to yield from the iterator."""
-        yield_list = []
-
-        if self.yields.ENCODING:
-            yield_list.append(self.recognition_system.model.encoding)
-
-        if self.yields.LOSS:
-            yield_list.append(loss)
-
-        return yield_list
-
-    def __iter__(self):
-        """
-        Run the virtual eye in a for loop frame by frame.
-
-        returns the encoding and loss in a tuple by default.
-        """
-        prev = VirtualEyeWithLens.State()
-        while self.cam:
-            if len(self.cam.frames) > 0:
-                frame = self.cam.frames[0]
-
-                prev = self._update_prev(frame, prev)
-
-                loss = self.train_recognizer(frame, prev.frame, prev.movement)
-
-                yield tuple(self._handle_iter_yields(loss))
-                self.bad_actions = 0  # reset now that we've yielded
-
-                prev.frame = frame.copy()
-
-                self._update_focal_point()
-                self._encode_focal_point_movement(prev)
-
-                self.recognition_system.model.set_movement_data_len(prev.movement.size)
-        self.save()
-
-    def _init_cam(self, cam):
-        """Initialize the input camera."""
-        self._pre_crop_callback = crop.Crop(
-            output_size=self.crop_settings.PRE_LENS
-        ).enable_mouse_control()
-        self._lens_callback = None
-        self._post_crop_callback = crop.Crop(
-            output_size=self.crop_settings.POST_LENS
-        ).enable_mouse_control()
-
-        if not isinstance(cam, Iterable):
-            cam = [cam]
-
-        self.cam = (
-            display(*cam, size=self.crop_settings.CAM_SIZE_REQUEST)
-            .add_callback(self._pre_crop_callback)
-            .add_callback(self._lens_callback)
-            .add_callback(self._post_crop_callback)
-            .wait_for_init()
-        )
-
-    def _update_focal_point(self):
-        """Set the focal point to update in the next iteration."""
-        self._pre_crop_callback.center = [
-            self.state.center[0] * self._pre_crop_callback.input_size[0],
-            self.state.center[1] * self._pre_crop_callback.input_size[1],
-        ]
-        self._lens_callback.center = [
-            self.state.center[0] * self._lens_callback.input_size[0],
-            self.state.center[1] * self._lens_callback.input_size[0],
-        ]
-        self._post_crop_callback.center = [
-            self._post_crop_callback.input_size[0] / 2,
-            self._post_crop_callback.input_size[1] / 2,
-        ]
-
-        self._lens_callback.zoom = self.state.zoom
-
-    def _punish_out_of_bounds_actions(self):
-        """
-        Punish the AI for out of bounds actions, linearly.
-
-        The more it goes out of bounds, the more it gets punished.
-        """
-        if self.state.center[0] == self.CENTER_MIN:
-            self.bad_actions += self.state.center[0] - self.state.unclipped_center[0]
-        if self.state.center[1] == self.CENTER_MIN:
-            self.bad_actions += self.state.center[1] - self.state.unclipped_center[1]
-        if self.state.center[0] == self.CENTER_MAX:
-            self.bad_actions += self.state.unclipped_center[0] - self.state.center[0]
-        if self.state.center[1] == self.CENTER_MAX:
-            self.bad_actions += self.state.unclipped_center[1] - self.state.center[1]
-
-        if self.state.zoom == self.ZOOM_MIN:
-            self.bad_actions += self.state.zoom - self.state.unclipped_zoom
-
-        if self.state.zoom == self.ZOOM_MAX:
-            self.bad_actions += self.state.unclipped_zoom - self.state.zoom
-
-    def _punish_overly_rapid_actions(self, diff: State):
-        if diff.center[0] == 0:
-            self.bad_actions += (
-                diff.center[0] - diff.unclipped_center[0]
-            ) / self._pre_crop_callback.input_size[0]
-        if diff.center[1] == 0:
-            self.bad_actions += (
-                diff.center[1] - diff.unclipped_center[1]
-            ) / self._pre_crop_callback.input_size[1]
-        if diff.center[0] >= self._pre_crop_callback.input_size[0] * 2:
-            self.bad_actions += (
-                diff.center[0] - self._pre_crop_callback.input_size[0] * 2
-            ) / self._pre_crop_callback.input_size[0]
-        if diff.center[1] >= self._pre_crop_callback.input_size[1] * 2:
-            self.bad_actions += (
-                diff.center[1] - self._pre_crop_callback.input_size[0] * 2
-            ) / self._pre_crop_callback.input_size[1]
-
-        if diff.zoom == 0:
-            self.bad_actions += diff.zoom - diff.unclipped_zoom
-        if diff.zoom > 1:
-            self.bad_actions += diff.zoom - 1
-
-
-    def _setup_movement_values_for_encoding(self, prev: State):
-        """The encoder currently only supports positive integers, so wen need to convert some of our values."""
-        diff = VirtualEyeWithLens.State()
-
-        center = [None, None]
-        center[0] = (
-            self._pre_crop_callback.center[0] + self._pre_crop_callback.input_size[0]
-        )
-        center[1] = (
-            self._pre_crop_callback.center[1] + self._pre_crop_callback.input_size[1]
-        )
-
-        diff.unclipped_center = [None, None]
-        diff.unclipped_center[0] = (
-            self._pre_crop_callback.center[0]
-            - prev.center[0]
-            + self._pre_crop_callback.input_size[0]
-        )
-        diff.unclipped_center[1] = (
-            self._pre_crop_callback.center[1]
-            - prev.center[1]
-            + self._pre_crop_callback.input_size[1]
-        )
-        diff.center = [None, None]
-        diff.center[0] = max(0, diff.unclipped_center[0])
-        diff.center[1] = max(0, diff.unclipped_center[1])
-
-        diff.unclipped_zoom = self._lens_callback.zoom - prev.zoom + 1
-        diff.zoom = max(diff.unclipped_zoom, 0)
-
-        return center, diff
-
-    def _encode_focal_point_movement(self, prev: State):
-        """Encode our motion in a way neural networks will be able to learn from it."""
-
-        # todo: move the byte safety code to ints_to_2d
-        try:
-            center, diff = self._setup_movement_values_for_encoding(prev)
-
-            encode_center = ints_to_2d(
-                center[0],
-                int(
-                    m.ceil(m.log2(self._pre_crop_callback.input_size[0]) / 8) * 8
-                ),  # todo: move this to ints_to_2d
-                self.movement_encoding_widths.CENTER_X,
-                center[1],
-                int(m.ceil(m.log2(self._pre_crop_callback.input_size[1]) / 8) * 8),
-                self.movement_encoding_widths.CENTER_Y,
-            )
-
-            encode_change_in_center = ints_to_2d(
-                diff.center[0],
-                int(m.ceil(m.log2(self._pre_crop_callback.input_size[0] * 2) / 8) * 8),
-                self.movement_encoding_widths.CENTER_DX,
-                diff.center[1],
-                int(m.ceil(m.log2(self._pre_crop_callback.input_size[1] * 2) / 8) * 8),
-                self.movement_encoding_widths.CENTER_DY,
-            )
-
-            encode_zoom = int_to_1d(
-                self._lens_callback.zoom * (2 ** 8),
-                16,
-                self.movement_encoding_widths.ZOOM,
-            )
-
-            encode_change_in_zoom = int_to_1d(
-                diff.zoom * (2 ** 8), 16, self.movement_encoding_widths.DZOOM
-            )
-
-            prev_movement = np.concatenate(
-                (
-                    encode_center,
-                    encode_change_in_center,
-                    encode_zoom,
-                    encode_change_in_zoom,
-                ),
-                axis=None,
-            )
-
-            self._punish_out_of_bounds_actions()
-            self._punish_overly_rapid_actions(diff)
-            return prev_movement
-
-        except ValueError as ve:
-            import traceback
-
-            traceback.print_exc()
-            print("The AI programmed an illegal value.")
+        return VideoLearner.deserialize_full(state)
 
 
 if __name__ == "__main__":
-    eye = VirtualEyeWithLens()
+    eye = VideoLearner()
     eye.run()
